@@ -3,11 +3,17 @@ from django.urls import path, include
 
 from rest_framework.routers import DefaultRouter
 
-from apps.core.views import hello, projects, AgentViewSet
+from apps.core.views import (
+    hello,
+    projects,
+    AgentViewSet,
+    TaskViewSet,
+)
 
 
 router = DefaultRouter()
 router.register(r"agents", AgentViewSet)
+router.register(r"tasks", TaskViewSet)
 
 
 urlpatterns = [

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Project, Agent
+from .models import Project, Agent, Task
 
 
 class ProjectSerializer(serializers.ModelSerializer):
@@ -13,3 +13,8 @@ class AgentSerializer(serializers.ModelSerializer):
         model = Agent
         fields = "__all__"
 
+
+class TaskSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Task
+        fields = "__all__"

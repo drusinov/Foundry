@@ -2,8 +2,12 @@ from rest_framework import viewsets
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 
-from .models import Project, Agent
-from .serializers import ProjectSerializer, AgentSerializer
+from .models import Project, Agent, Task
+from .serializers import (
+    ProjectSerializer,
+    AgentSerializer,
+    TaskSerializer,
+)
 
 
 @api_view(["GET"])
@@ -32,3 +36,9 @@ def projects(request):
 class AgentViewSet(viewsets.ModelViewSet):
     queryset = Agent.objects.all().order_by("-created_at")
     serializer_class = AgentSerializer
+
+
+class TaskViewSet(viewsets.ModelViewSet):
+    queryset = Task.objects.all().order_by("-created_at")
+    serializer_class = TaskSerializer
+
