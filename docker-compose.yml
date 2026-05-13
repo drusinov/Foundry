@@ -11,6 +11,8 @@ services:
   backend:
     build:
       context: ./apps/backend
+    env_file:
+      - .env
     command: >
       sh -c "
       python manage.py migrate &&
