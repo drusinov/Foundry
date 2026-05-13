@@ -18,3 +18,27 @@ class Project(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class Agent(models.Model):
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name="agents"
+    )
+
+    name = models.CharField(max_length=255)
+
+    system_prompt = models.TextField()
+
+    model = models.CharField(
+        max_length=100,
+        default="gpt-5"
+    )
+
+    is_active = models.BooleanField(default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name
