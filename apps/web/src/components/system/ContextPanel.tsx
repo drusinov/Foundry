@@ -8,7 +8,13 @@ import { generateContextSummary } from "@/core/context/generate-context-summary"
 
 import { downloadContextFile } from "@/core/context/download-context-file"
 
+import { generateRuntimeImpacts } from "@/core/runtime/runtime-impact-engine"
+
 import { mockContextDocument } from "@/core/types/mock-context-document"
+
+import { useGitRuntime } from "@/hooks/useGitRuntime"
+
+import { useFileRuntime } from "@/hooks/useFileRuntime"
 
 export function ContextPanel() {
   const {
@@ -25,6 +31,12 @@ export function ContextPanel() {
     appendEntry,
   } = useInteraction()
 
+  const gitRuntime =
+    useGitRuntime()
+
+  const fileRuntime =
+    useFileRuntime()
+
   const generatedSummary =
     useMemo(() => {
       return generateContextSummary({
@@ -35,6 +47,17 @@ export function ContextPanel() {
       latestCheckpoint,
       entries,
     ])
+
+  const runtimeImpacts =
+    useMemo(() => {
+      if (!gitRuntime) {
+        return []
+      }
+
+      return generateRuntimeImpacts(
+        gitRuntime.diffEntries,
+      )
+    }, [gitRuntime])
 
   async function copyContextSummary() {
     await navigator.clipboard.writeText(
@@ -97,7 +120,7 @@ export function ContextPanel() {
         </div>
       </div>
 
-      <div className="space-y-4 text-sm text-zinc-300">
+      <div className="space-y-5 text-sm text-zinc-300">
         <div>
           <div className="text-white">
             {
@@ -111,6 +134,189 @@ export function ContextPanel() {
               mockContextDocument.project
                 .description
             }
+          </div>
+        </div>
+
+        <div>
+          <div className="mb-2 text-xs uppercase tracking-wide text-zinc-500">
+            Git Runtime
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+            {gitRuntime ? (
+              <div className="space-y-3 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-zinc-500">
+                    Branch
+                  </span>
+
+                  <span className="font-mono text-cyan-300">
+                    {gitRuntime.branch}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-zinc-500">
+                    Latest Commit
+                  </span>
+
+                  <span className="font-mono text-white">
+                    {
+                      gitRuntime.latestCommit
+                    }
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-zinc-500">
+                    Working Tree
+                  </span>
+
+                  <span
+                    className={
+                      gitRuntime.workingTreeClean
+                        ? "text-emerald-400"
+                        : "text-yellow-400"
+                    }
+                  >
+                    {gitRuntime
+                      .workingTreeClean
+                      ? "Clean"
+                      : "Modified"}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-zinc-500">
+                    Changed Files
+                  </span>
+
+                  <span className="text-white">
+                    {
+                      gitRuntime.changedFiles
+                    }
+                  </span>
+                </div>
+
+                {gitRuntime.diffEntries
+                  .length > 0 && (
+                  <div>
+                    <div className="mb-2 text-[10px] uppercase tracking-wide text-zinc-500">
+                      Runtime Diff
+                    </div>
+
+                    <div className="space-y-1">
+                      {gitRuntime.diffEntries.map(
+                        (entry) => (
+                          <div
+                            key={entry.file}
+                            className="flex items-center justify-between gap-2 rounded-md border border-white/5 bg-white/5 px-2 py-1"
+                          >
+                            <span className="text-yellow-400">
+                              {
+                                entry.status
+                              }
+                            </span>
+
+                            <span className="truncate font-mono text-[11px] text-zinc-300">
+                              {entry.file}
+                            </span>
+                          </div>
+                        ),
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-xs text-zinc-500">
+                Loading git runtime...
+              </div>
+            )}
+          </div>
+        </div>
+
+        {runtimeImpacts.length > 0 && (
+          <div>
+            <div className="mb-2 text-xs uppercase tracking-wide text-zinc-500">
+              Runtime Impact Analysis
+            </div>
+
+            <div className="space-y-2">
+              {runtimeImpacts.map(
+                (impact) => (
+                  <div
+                    key={impact.title}
+                    className="rounded-xl border border-cyan-500/10 bg-cyan-500/5 p-3"
+                  >
+                    <div className="truncate font-mono text-[11px] text-cyan-300">
+                      {impact.title}
+                    </div>
+
+                    <div className="mt-2 space-y-1">
+                      {impact.impacts.map(
+                        (
+                          runtimeImpact,
+                        ) => (
+                          <div
+                            key={
+                              runtimeImpact
+                            }
+                            className="text-[11px] text-zinc-300"
+                          >
+                            •{" "}
+                            {
+                              runtimeImpact
+                            }
+                          </div>
+                        ),
+                      )}
+                    </div>
+                  </div>
+                ),
+              )}
+            </div>
+          </div>
+        )}
+
+        <div>
+          <div className="mb-2 text-xs uppercase tracking-wide text-zinc-500">
+            File Runtime
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+            {fileRuntime ? (
+              <div>
+                <div className="mb-3 flex items-center justify-between text-xs">
+                  <span className="text-zinc-500">
+                    Total Files
+                  </span>
+
+                  <span className="text-white">
+                    {
+                      fileRuntime.totalFiles
+                    }
+                  </span>
+                </div>
+
+                <div className="space-y-1">
+                  {fileRuntime.recentFiles.map(
+                    (file) => (
+                      <div
+                        key={file}
+                        className="truncate font-mono text-[11px] text-zinc-400"
+                      >
+                        {file}
+                      </div>
+                    ),
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="text-xs text-zinc-500">
+                Loading filesystem runtime...
+              </div>
+            )}
           </div>
         </div>
 
