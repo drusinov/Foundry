@@ -1,14 +1,14 @@
 "use client"
 
+import { useState } from "react"
+
 import { AppShell } from "@/components/layout/AppShell"
 
 import { CommandPalette } from "@/components/command/CommandPalette"
 
-import { ThreadSurface } from "@/components/thread/ThreadSurface"
+import { OperationalChat } from "@/components/system/OperationalChat"
 
 import { ContextPanel } from "@/components/system/ContextPanel"
-
-import { OperationalChat } from "@/components/system/OperationalChat"
 
 import { useCommandRuntime } from "@/core/registry/use-command-runtime"
 
@@ -29,81 +29,173 @@ function FoundryPage() {
     openCommandPalette,
   } = useInteraction()
 
+  const [
+    sidebarCollapsed,
+    setSidebarCollapsed,
+  ] = useState(false)
+
   return (
     <AppShell>
-      <div className="flex h-screen flex-col overflow-hidden bg-[#070B14]">
-        <div className="flex h-10 items-center justify-between border-b border-white/10 bg-black/30 px-4 backdrop-blur">
-          <div className="flex items-center gap-3">
-            <div className="text-sm font-semibold text-white">
-              Foundry
-            </div>
-
-            <div className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-[2px] text-[10px] uppercase tracking-wide text-cyan-300">
-              Operational Runtime
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 text-[11px] text-zinc-500">
-            <div>
-              Phase 2A
-            </div>
-
-            <div className="h-1 w-1 rounded-full bg-zinc-600" />
-
-            <div>
-              Deterministic Runtime
-            </div>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-hidden">
-          <div className="grid h-full grid-cols-[minmax(0,1fr)_280px] gap-4 p-4">
-            <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
-              <div className="border-b border-white/10 px-4 py-3">
-                <div className="flex items-center justify-between">
+      <div className="h-screen overflow-hidden bg-[#070B14] text-white">
+        <div className="flex h-full">
+          <aside
+            className={`border-r border-white/10 bg-black/20 transition-all duration-300 ${
+              sidebarCollapsed
+                ? "w-[72px]"
+                : "w-[260px]"
+            }`}
+          >
+            <div className="flex h-full flex-col">
+              <div className="flex h-14 items-center justify-between border-b border-white/10 px-4">
+                {!sidebarCollapsed && (
                   <div>
-                    <div className="text-sm font-medium text-white">
-                      Operational Workspace
+                    <div className="text-sm font-semibold">
+                      Foundry
                     </div>
 
-                    <div className="mt-1 text-xs text-zinc-500">
-                      Runtime-aware interaction surface
+                    <div className="text-[10px] uppercase tracking-wide text-cyan-400">
+                      Operational Runtime
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  onClick={() =>
+                    setSidebarCollapsed(
+                      !sidebarCollapsed,
+                    )
+                  }
+                  className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs text-zinc-300"
+                >
+                  {sidebarCollapsed
+                    ? "→"
+                    : "←"}
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-3">
+                <div className="space-y-6">
+                  <div>
+                    {!sidebarCollapsed && (
+                      <div className="mb-2 px-2 text-[11px] uppercase tracking-wide text-zinc-500">
+                        Workspace
+                      </div>
+                    )}
+
+                    <div className="space-y-1">
+                      {[
+                        "Operational Chat",
+                        "Runtime Context",
+                        "Checkpoints",
+                        "Handoff Notes",
+                      ].map((item) => (
+                        <button
+                          key={item}
+                          className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-zinc-300 transition hover:bg-white/5"
+                        >
+                          <div className="h-2 w-2 rounded-full bg-cyan-400" />
+
+                          {!sidebarCollapsed &&
+                            item}
+                        </button>
+                      ))}
                     </div>
                   </div>
 
-                  <button
-                    onClick={
-                      openCommandPalette
-                    }
-                    className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white transition hover:bg-white/10"
-                  >
-                    ⌘K
-                  </button>
+                  <div>
+                    {!sidebarCollapsed && (
+                      <div className="mb-2 px-2 text-[11px] uppercase tracking-wide text-zinc-500">
+                        Actions
+                      </div>
+                    )}
+
+                    <div className="space-y-1">
+                      {[
+                        "Save Snapshot",
+                        "Export Continuity",
+                        "Push Git Checkpoint",
+                        "Compact Runtime",
+                        "Generate Handoff",
+                        "Restart Runtime",
+                      ].map((item) => (
+                        <button
+                          key={item}
+                          className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-zinc-300 transition hover:bg-white/5"
+                        >
+                          <div className="h-2 w-2 rounded-full bg-white/30" />
+
+                          {!sidebarCollapsed &&
+                            item}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div className="flex-1 overflow-hidden">
-                <div className="grid h-full grid-rows-[minmax(0,1fr)_minmax(520px,auto)]">
-                  <div className="overflow-y-auto p-4">
-                    <ThreadSurface />
-                  </div>
+              {!sidebarCollapsed && (
+                <div className="border-t border-white/10 p-4">
+                  <div className="rounded-2xl border border-cyan-500/10 bg-cyan-500/5 p-3">
+                    <div className="mb-2 text-[11px] uppercase tracking-wide text-cyan-400">
+                      Active Checkpoint
+                    </div>
 
-                  <div className="border-t border-white/10 bg-black/20 p-4">
-                    <OperationalChat />
+                    <div className="font-mono text-sm text-white">
+                      checkpoint-1778953300648
+                    </div>
                   </div>
                 </div>
+              )}
+            </div>
+          </aside>
+
+          <div className="flex min-w-0 flex-1 flex-col">
+            <div className="flex h-14 items-center justify-between border-b border-white/10 bg-black/20 px-5">
+              <div>
+                <div className="text-sm font-medium text-white">
+                  Operational Chat
+                </div>
+
+                <div className="text-xs text-zinc-500">
+                  AI-native development workspace
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-zinc-300 transition hover:bg-white/10">
+                  Save Snapshot
+                </button>
+
+                <button className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-zinc-300 transition hover:bg-white/10">
+                  Export Continuity
+                </button>
+
+                <button className="rounded-xl border border-white/10 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-300 transition hover:bg-cyan-500/20">
+                  Push Git
+                </button>
+
+                <button
+                  onClick={
+                    openCommandPalette
+                  }
+                  className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white"
+                >
+                  ⌘K
+                </button>
               </div>
             </div>
 
-            <div className="min-h-0 overflow-y-auto rounded-2xl border border-white/10 bg-black/20 p-3">
-              <div className="mb-3 px-2">
-                <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                  Runtime Context
+            <div className="flex min-h-0 flex-1">
+              <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+                <div className="min-h-0 flex-1 overflow-hidden p-4">
+                  <OperationalChat />
                 </div>
               </div>
 
-              <div className="space-y-4">
-                <ContextPanel />
+              <div className="w-[360px] border-l border-white/10 bg-black/20">
+                <div className="h-full overflow-y-auto p-4">
+                  <ContextPanel />
+                </div>
               </div>
             </div>
           </div>
