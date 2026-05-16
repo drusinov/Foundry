@@ -1,45 +1,28 @@
-import type {
-  CommandId,
-} from "./command-types"
+import type { CommandDefinition } from "./command-types"
 
-type CommandRuntime = {
-  toggleCommandPalette: () => void
-}
+import { useInteraction } from "@/core/state/interaction-store"
 
-let runtime: CommandRuntime | null = null
+export function useCommandActions() {
+  const {
+    appendEntry,
+    closeCommandPalette,
+  } = useInteraction()
 
-export function registerCommandRuntime(
-  nextRuntime: CommandRuntime,
-) {
-  runtime = nextRuntime
-}
+  function executeCommand(command: CommandDefinition) {
+    appendEntry({
+      id: crypto.randomUUID(),
 
-export function executeCommand(
-  commandId: CommandId,
-) {
-  switch (commandId) {
-    case "open-command-palette":
-      runtime?.toggleCommandPalette()
-      return
+      type: "system",
 
-    case "focus-orbit":
-      console.log("FOCUS ORBIT")
-      return
+      title: "Command Executed",
 
-    case "focus-thread":
-      console.log("FOCUS THREAD")
-      return
+      content: `Executed: ${command.label}`,
+    })
 
-    case "focus-inspector":
-      console.log("FOCUS INSPECTOR")
-      return
+    closeCommandPalette()
+  }
 
-    case "create-brief":
-      console.log("CREATE BRIEF")
-      return
-
-    case "dispatch-run":
-      console.log("DISPATCH RUN")
-      return
+  return {
+    executeCommand,
   }
 }

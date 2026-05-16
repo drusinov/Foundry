@@ -1,63 +1,90 @@
 "use client"
 
-import { createContext, useContext, useState } from "react"
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react"
 
-type InteractionState = {
+import { mockThread } from "@/core/thread/mock-thread"
+import type { ThreadEntry } from "@/core/thread/types"
+
+type InteractionContextValue = {
   commandPaletteOpen: boolean
+
+  entries: ThreadEntry[]
 
   openCommandPalette: () => void
   closeCommandPalette: () => void
-  toggleCommandPalette: () => void
+
+  appendEntry: (entry: ThreadEntry) => void
 }
 
 const InteractionContext =
-  createContext<InteractionState | null>(null)
+  createContext<InteractionContextValue | null>(null)
 
-export function InteractionProvider({
-  children,
-}: {
-  children: React.ReactNode
-}) {
-  const [
-    commandPaletteOpen,
-    setCommandPaletteOpen,
-  ] = useState(false)
+type Props = {
+  children: ReactNode
+}
 
-  function openCommandPalette() {
+export function InteractionProvider({ children }: Props) {
+  const [commandPaletteOpen, setCommandPaletteOpen] =
+    useState(false)
+
+  const [entries, setEntries] =
+    useState<ThreadEntry[]>(mockThread)
+
+  const openCommandPalette = useCallback(() => {
     setCommandPaletteOpen(true)
-  }
+  }, [])
 
-  function closeCommandPalette() {
+  const closeCommandPalette = useCallback(() => {
     setCommandPaletteOpen(false)
-  }
+  }, [])
 
-  function toggleCommandPalette() {
-    setCommandPaletteOpen((previous) => !previous)
-  }
+  const appendEntry = useCallback((entry: ThreadEntry) => {
+    setEntries((current) => [...current, entry])
+  }, [])
+
+  const value = useMemo(
+    () => ({
+      commandPaletteOpen,
+
+      entries,
+
+      openCommandPalette,
+      closeCommandPalette,
+
+      appendEntry,
+    }),
+    [
+      commandPaletteOpen,
+
+      entries,
+
+      openCommandPalette,
+      closeCommandPalette,
+
+      appendEntry,
+    ],
+  )
 
   return (
-    <InteractionContext.Provider
-      value={{
-        commandPaletteOpen,
-
-        openCommandPalette,
-        closeCommandPalette,
-        toggleCommandPalette,
-      }}
-    >
+    <InteractionContext.Provider value={value}>
       {children}
     </InteractionContext.Provider>
   )
 }
 
-export function useInteractionStore() {
-  const context = useContext(
-    InteractionContext,
-  )
+export function useInteraction() {
+  const context = useContext(InteractionContext)
 
   if (!context) {
     throw new Error(
-      "useInteractionStore must be used within InteractionProvider",
+      "useInteraction must be used within InteractionProvider",
     )
   }
 

@@ -2,43 +2,48 @@
 
 import { AppShell } from "@/components/layout/AppShell"
 
-import { OrbitSidebar } from "@/components/system/OrbitSidebar"
-import { InspectorPanel } from "@/components/system/InspectorPanel"
+import { CommandPalette } from "@/components/command/CommandPalette"
 
 import { ThreadSurface } from "@/components/thread/ThreadSurface"
-
-import { CommandPalette } from "@/components/command/CommandPalette"
 
 import { useCommandRuntime } from "@/core/registry/use-command-runtime"
 
 import {
   InteractionProvider,
-  useInteractionStore,
+  useInteraction,
 } from "@/core/state/interaction-store"
 
 function FoundryPage() {
   useCommandRuntime()
 
-  const { commandPaletteOpen } =
-    useInteractionStore()
+  const {
+    commandPaletteOpen,
+    openCommandPalette,
+  } = useInteraction()
 
   return (
-    <>
-      <AppShell
-        sidebar={<OrbitSidebar />}
-        inspector={<InspectorPanel />}
-      >
-        <ThreadSurface />
-      </AppShell>
+    <AppShell>
+      <div className="flex h-full flex-col">
+        <div className="border-b border-white/10 p-4">
+          <button
+            onClick={openCommandPalette}
+            className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white transition hover:bg-white/10"
+          >
+            Open Command Palette
+          </button>
+        </div>
 
-      <CommandPalette
-        open={commandPaletteOpen}
-      />
-    </>
+        <div className="flex-1 overflow-hidden p-6">
+          <ThreadSurface />
+        </div>
+      </div>
+
+      <CommandPalette open={commandPaletteOpen} />
+    </AppShell>
   )
 }
 
-export default function HomePage() {
+export default function Page() {
   return (
     <InteractionProvider>
       <FoundryPage />
