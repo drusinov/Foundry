@@ -2,8 +2,8 @@
 
 import {
   useMemo,
+  useRef,
   useState,
-  type KeyboardEvent,
 } from "react"
 
 import { useInteraction } from "@/core/state/interaction-store"
@@ -32,6 +32,11 @@ export function OperationalChat() {
 
   const { loading, executePrompt } =
     useAiRuntime()
+
+  const messagesEndRef =
+    useRef<HTMLDivElement | null>(
+      null,
+    )
 
   const runtimeImpacts =
     useMemo(() => {
@@ -102,6 +107,16 @@ export function OperationalChat() {
 
     setGeneratedPrompt(prompt)
 
+    setInput("")
+
+    requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView(
+        {
+          behavior: "smooth",
+        },
+      )
+    })
+
     if (!apiKey.trim()) {
       return
     }
@@ -125,7 +140,13 @@ export function OperationalChat() {
         new Date().toISOString(),
     })
 
-    setInput("")
+    requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView(
+        {
+          behavior: "smooth",
+        },
+      )
+    })
   }
 
   async function copyPrompt() {
@@ -134,16 +155,8 @@ export function OperationalChat() {
     )
   }
 
-  function handleKeyDown(
-    event: KeyboardEvent<HTMLInputElement>,
-  ) {
-    if (event.key === "Enter") {
-      sendMessage()
-    }
-  }
-
   return (
-    <div className="flex h-full flex-col rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+    <div className="flex h-full min-h-[520px] flex-col rounded-2xl border border-white/10 bg-white/[0.03] p-5">
       <div className="mb-4 flex items-center justify-between">
         <div className="text-sm font-medium text-white">
           Operational Chat
@@ -154,7 +167,7 @@ export function OperationalChat() {
         </div>
       </div>
 
-      <div className="mb-3">
+      <div className="mb-4">
         <input
           value={apiKey}
           onChange={(event) =>
@@ -167,68 +180,68 @@ export function OperationalChat() {
         />
       </div>
 
-      <div className="flex-1 space-y-4 overflow-hidden">
-        <div className="h-full overflow-y-auto rounded-xl border border-white/10 bg-black/20 p-3">
-          <div className="space-y-2">
-            {operationalMessages.map(
-              (message) => (
-                <div
-                  key={message.id}
-                  className={`rounded-xl p-3 text-sm ${
-                    message.role ===
-                    "user"
-                      ? "bg-cyan-500/10 text-cyan-100"
-                      : "bg-white/5 text-zinc-300"
-                  }`}
-                >
-                  <div className="mb-1 text-[10px] uppercase tracking-wide text-zinc-500">
-                    {message.role}
-                  </div>
-
-                  <div className="whitespace-pre-wrap">
-                    {message.content}
-                  </div>
-                </div>
-              ),
-            )}
-
-            {loading && (
-              <div className="rounded-xl border border-cyan-500/10 bg-cyan-500/5 p-3 text-sm text-cyan-300">
-                Foundry runtime thinking...
-              </div>
-            )}
-          </div>
-        </div>
-
+      <div className="mb-4 flex-1 overflow-y-auto rounded-xl border border-white/10 bg-black/20 p-3">
         <div className="space-y-3">
-          <textarea
-            value={input}
-            onChange={(event) =>
-              setInput(
-                event.target.value,
-              )
-            }
-            placeholder="Send operational request..."
-            className="min-h-[120px] w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-500"
-          />
+          {operationalMessages.map(
+            (message) => (
+              <div
+                key={message.id}
+                className={`rounded-xl p-3 text-sm ${
+                  message.role ===
+                  "user"
+                    ? "bg-cyan-500/10 text-cyan-100"
+                    : "bg-white/5 text-zinc-300"
+                }`}
+              >
+                <div className="mb-1 text-[10px] uppercase tracking-wide text-zinc-500">
+                  {message.role}
+                </div>
 
-          <div className="flex items-center justify-between">
-            <button
-              onClick={copyPrompt}
-              className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white transition hover:bg-white/10"
-            >
-              Copy Prompt
-            </button>
+                <div className="whitespace-pre-wrap leading-7">
+                  {message.content}
+                </div>
+              </div>
+            ),
+          )}
 
-            <button
-              onClick={sendMessage}
-              className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-4 py-3 text-sm font-medium text-cyan-300 transition hover:bg-cyan-500/20"
-            >
-              {loading
-                ? "Running..."
-                : "Run"}
-            </button>
-          </div>
+          {loading && (
+            <div className="rounded-xl border border-cyan-500/10 bg-cyan-500/5 p-3 text-sm text-cyan-300">
+              Foundry runtime thinking...
+            </div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
+      </div>
+
+      <div className="space-y-3 border-t border-white/10 pt-4">
+        <textarea
+          value={input}
+          onChange={(event) =>
+            setInput(
+              event.target.value,
+            )
+          }
+          placeholder="Send operational request..."
+          className="min-h-[180px] w-full resize-none rounded-xl border border-white/10 bg-black/30 px-4 py-4 text-sm text-white outline-none placeholder:text-zinc-500"
+        />
+
+        <div className="flex items-center justify-between">
+          <button
+            onClick={copyPrompt}
+            className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white transition hover:bg-white/10"
+          >
+            Copy Prompt
+          </button>
+
+          <button
+            onClick={sendMessage}
+            className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-5 py-3 text-sm font-medium text-cyan-300 transition hover:bg-cyan-500/20"
+          >
+            {loading
+              ? "Running..."
+              : "Run"}
+          </button>
         </div>
       </div>
     </div>

@@ -83,7 +83,7 @@ function FoundryPage() {
               </div>
 
               <div className="flex-1 overflow-hidden">
-                <div className="grid h-full grid-rows-[minmax(0,1fr)_380px]">
+                <div className="grid h-full grid-rows-[minmax(0,1fr)_minmax(520px,auto)]">
                   <div className="overflow-y-auto p-4">
                     <ThreadSurface />
                   </div>

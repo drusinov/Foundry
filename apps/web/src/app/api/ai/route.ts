@@ -35,14 +35,29 @@ export async function POST(
                 content: prompt,
               },
             ],
+
+            temperature: 0.7,
           }),
         },
       )
+
+    const data =
+      await response.json()
+
+    console.log(
+      "OPENAI RESPONSE:",
+      JSON.stringify(
+        data,
+        null,
+        2,
+      ),
+    )
 
     if (!response.ok) {
       return NextResponse.json(
         {
           error:
+            data.error?.message ??
             "OpenAI request failed",
         },
         {
@@ -51,14 +66,14 @@ export async function POST(
       )
     }
 
-    const data =
-      await response.json()
+    const content =
+      data.choices?.[0]
+        ?.message?.content
 
     return NextResponse.json({
       content:
-        data.choices?.[0]
-          ?.message?.content ??
-        "",
+        content ??
+        "Empty AI response",
     })
   } catch (error) {
     console.error(error)
