@@ -1,5 +1,7 @@
 "use client"
 
+import { StatusRail } from "@/components/system/StatusRail"
+
 import { useState } from "react"
 
 import { AppShell } from "@/components/layout/AppShell"
@@ -37,7 +39,8 @@ function FoundryPage() {
   return (
     <AppShell>
       <div className="h-screen overflow-hidden bg-[#070B14] text-white">
-        <div className="flex h-full">
+        <StatusRail />
+        <div className="flex h-[calc(100vh-40px)]">
           <aside
             className={`border-r border-white/10 bg-black/20 transition-all duration-300 ${
               sidebarCollapsed

@@ -22,9 +22,9 @@ export function OperationalChat() {
   const {
     latestCheckpoint,
 
-    operationalMessages,
+    operationalEvents,
 
-    appendOperationalMessage,
+    appendOperationalEvent,
   } = useInteraction()
 
   const gitRuntime =
@@ -58,7 +58,24 @@ export function OperationalChat() {
 
         latestCheckpoint,
 
-        operationalMessages,
+        operationalMessages:
+          operationalEvents.map(
+            (event) => ({
+              id: event.id,
+
+              role:
+                event.type ===
+                "command"
+                  ? "user"
+                  : "system",
+
+              content:
+                event.content,
+
+              createdAt:
+                event.createdAt,
+            }),
+          ),
       })
     }, [
       gitRuntime,
@@ -67,7 +84,7 @@ export function OperationalChat() {
 
       latestCheckpoint,
 
-      operationalMessages,
+      operationalEvents,
     ])
 
   const [input, setInput] =
@@ -86,10 +103,10 @@ export function OperationalChat() {
       return
     }
 
-    appendOperationalMessage({
+    appendOperationalEvent({
       id: crypto.randomUUID(),
 
-      role: "user",
+      type: "command",
 
       content: input,
 
@@ -118,6 +135,18 @@ export function OperationalChat() {
     })
 
     if (!apiKey.trim()) {
+      appendOperationalEvent({
+        id: crypto.randomUUID(),
+
+        type: "error",
+
+        content:
+          "OpenAI API key missing.",
+
+        createdAt:
+          new Date().toISOString(),
+      })
+
       return
     }
 
@@ -127,14 +156,17 @@ export function OperationalChat() {
         prompt,
       )
 
-    appendOperationalMessage({
+    appendOperationalEvent({
       id: crypto.randomUUID(),
 
-      role: "system",
+      type:
+        aiResponse
+          ? "result"
+          : "error",
 
       content:
         aiResponse ??
-        "No response",
+        "AI runtime request failed.",
 
       createdAt:
         new Date().toISOString(),
@@ -155,58 +187,96 @@ export function OperationalChat() {
     )
   }
 
+  function getEventStyles(
+    type: string,
+  ) {
+    if (type === "command") {
+      return "border border-cyan-500/10 bg-cyan-500/10 text-cyan-100"
+    }
+
+    if (type === "result") {
+      return "border border-white/10 bg-white/[0.04] text-zinc-200"
+    }
+
+    if (type === "checkpoint") {
+      return "border border-emerald-500/10 bg-emerald-500/10 text-emerald-200"
+    }
+
+    if (type === "error") {
+      return "border border-red-500/10 bg-red-500/10 text-red-200"
+    }
+
+    if (type === "recovery") {
+      return "border border-amber-500/10 bg-amber-500/10 text-amber-200"
+    }
+
+    return "border border-white/5 bg-white/[0.03] text-zinc-400"
+  }
+
   return (
-    <div className="flex h-full min-h-[520px] flex-col rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-      <div className="mb-4 flex items-center justify-between">
-        <div className="text-sm font-medium text-white">
-          Operational Chat
+    <div className="flex h-full min-h-[520px] flex-col rounded-2xl border border-white/10 bg-white/[0.03]">
+      <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+        <div>
+          <div className="text-sm font-medium text-white">
+            Operational Runtime
+          </div>
+
+          <div className="mt-1 text-xs text-zinc-500">
+            Runtime-aware operational event stream
+          </div>
         </div>
 
-        <div className="text-[11px] text-zinc-500">
-          Embedded AI Runtime
+        <div className="flex items-center gap-2">
+          <button className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-zinc-300 transition hover:bg-white/10">
+            Create Checkpoint
+          </button>
+
+          <button className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-zinc-300 transition hover:bg-white/10">
+            Restore Checkpoint
+          </button>
+
+          <button className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-200 transition hover:bg-red-500/20">
+            Rollback Runtime
+          </button>
         </div>
       </div>
 
-      <div className="mb-4">
-        <input
-          value={apiKey}
-          onChange={(event) =>
-            setApiKey(
-              event.target.value,
-            )
-          }
-          placeholder="OpenAI API Key"
-          className="w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-500"
-        />
-      </div>
-
-      <div className="mb-4 flex-1 overflow-y-auto rounded-xl border border-white/10 bg-black/20 p-3">
+      <div className="flex-1 overflow-y-auto px-4 py-4">
         <div className="space-y-3">
-          {operationalMessages.map(
-            (message) => (
+          {operationalEvents.map(
+            (event) => (
               <div
-                key={message.id}
-                className={`rounded-xl p-3 text-sm ${
-                  message.role ===
-                  "user"
-                    ? "bg-cyan-500/10 text-cyan-100"
-                    : "bg-white/5 text-zinc-300"
-                }`}
+                key={event.id}
+                className={`rounded-2xl p-4 ${getEventStyles(
+                  event.type,
+                )}`}
               >
-                <div className="mb-1 text-[10px] uppercase tracking-wide text-zinc-500">
-                  {message.role}
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">
+                    {event.type.replaceAll(
+                      "_",
+                      " ",
+                    )}
+                  </div>
+
+                  <div className="text-[10px] text-zinc-600">
+                    {event.createdAt.slice(
+                      11,
+                      19,
+                    )}
+                  </div>
                 </div>
 
-                <div className="whitespace-pre-wrap leading-7">
-                  {message.content}
+                <div className="whitespace-pre-wrap text-sm leading-7">
+                  {event.content}
                 </div>
               </div>
             ),
           )}
 
           {loading && (
-            <div className="rounded-xl border border-cyan-500/10 bg-cyan-500/5 p-3 text-sm text-cyan-300">
-              Foundry runtime thinking...
+            <div className="rounded-2xl border border-cyan-500/10 bg-cyan-500/5 p-4 text-sm text-cyan-300">
+              Foundry runtime processing operational request...
             </div>
           )}
 
@@ -214,34 +284,47 @@ export function OperationalChat() {
         </div>
       </div>
 
-      <div className="space-y-3 border-t border-white/10 pt-4">
-        <textarea
-          value={input}
-          onChange={(event) =>
-            setInput(
-              event.target.value,
-            )
-          }
-          placeholder="Send operational request..."
-          className="min-h-[180px] w-full resize-none rounded-xl border border-white/10 bg-black/30 px-4 py-4 text-sm text-white outline-none placeholder:text-zinc-500"
-        />
+      <div className="border-t border-white/10 p-4">
+        <div className="space-y-3">
+          <input
+            value={apiKey}
+            onChange={(event) =>
+              setApiKey(
+                event.target.value,
+              )
+            }
+            placeholder="OpenAI API Key"
+            className="w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-500"
+          />
 
-        <div className="flex items-center justify-between">
-          <button
-            onClick={copyPrompt}
-            className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white transition hover:bg-white/10"
-          >
-            Copy Prompt
-          </button>
+          <textarea
+            value={input}
+            onChange={(event) =>
+              setInput(
+                event.target.value,
+              )
+            }
+            placeholder="Send operational request..."
+            className="min-h-[140px] w-full resize-none rounded-2xl border border-white/10 bg-black/30 px-4 py-4 text-sm text-white outline-none placeholder:text-zinc-500"
+          />
 
-          <button
-            onClick={sendMessage}
-            className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-5 py-3 text-sm font-medium text-cyan-300 transition hover:bg-cyan-500/20"
-          >
-            {loading
-              ? "Running..."
-              : "Run"}
-          </button>
+          <div className="flex items-center justify-between">
+            <button
+              onClick={copyPrompt}
+              className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-zinc-300 transition hover:bg-white/10"
+            >
+              Copy Runtime Prompt
+            </button>
+
+            <button
+              onClick={sendMessage}
+              className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-5 py-3 text-sm font-medium text-cyan-300 transition hover:bg-cyan-500/20"
+            >
+              {loading
+                ? "Running..."
+                : "Execute"}
+            </button>
+          </div>
         </div>
       </div>
     </div>

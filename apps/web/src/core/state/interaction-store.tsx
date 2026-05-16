@@ -2,366 +2,162 @@
 
 import {
   createContext,
-  useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
-  type ReactNode,
 } from "react"
 
-import { mockThread } from "@/core/thread/mock-thread"
-
 import type {
-  AnyThreadEntry,
-} from "@/core/thread/types"
+  OperationalEvent,
+} from "@/core/types/operational-event"
 
-import type { OperationalMessage } from "@/core/types/operational-message"
+type SessionRuntime = {
+  currentObjective: string
 
-import type { SessionRuntime } from "@/core/types/session-runtime"
+  activeWorkstream: string
 
-import {
-  defaultSessionRuntime,
-} from "@/core/types/session-runtime"
+  nextAction: string
 
-import {
-  loadRuntimeState,
-  persistRuntimeState,
-} from "@/core/state/runtime-persistence"
+  activeRisks: string
 
-export type CheckpointSnapshot = {
-  id: string
-
-  createdAt: string
-
-  summary: string
+  runtimeState: string
 }
 
-type InteractionContextValue = {
-  commandPaletteOpen: boolean
+type InteractionContextValue =
+  {
+    commandPaletteOpen: boolean
 
-  selectedCommandIndex: number
+    openCommandPalette: () => void
 
-  latestCheckpoint: string
+    closeCommandPalette: () => void
 
-  activeCheckpointId: string | null
+    latestCheckpoint: string
 
-  checkpointHistory: CheckpointSnapshot[]
+    operationalEvents: OperationalEvent[]
 
-  entries: AnyThreadEntry[]
+    appendOperationalEvent: (
+      event: OperationalEvent,
+    ) => void
 
-  operationalMessages: OperationalMessage[]
+    sessionRuntime: SessionRuntime
 
-  sessionRuntime: SessionRuntime
-
-  openCommandPalette: () => void
-  closeCommandPalette: () => void
-
-  setSelectedCommandIndex: (
-    index: number,
-  ) => void
-
-  resetSelectedCommandIndex: () => void
-
-  setLatestCheckpoint: (
-    checkpoint: string,
-  ) => void
-
-  setActiveCheckpointId: (
-    checkpointId: string,
-  ) => void
-
-  setSessionRuntime: (
-    runtime: SessionRuntime,
-  ) => void
-
-  appendCheckpoint: (
-    checkpoint: CheckpointSnapshot,
-  ) => void
-
-  appendEntry: (
-    entry: AnyThreadEntry,
-  ) => void
-
-  appendOperationalMessage: (
-    message: OperationalMessage,
-  ) => void
-}
+    setSessionRuntime: (
+      runtime: SessionRuntime,
+    ) => void
+  }
 
 const InteractionContext =
-  createContext<InteractionContextValue | null>(
-    null,
-  )
-
-type Props = {
-  children: ReactNode
-}
-
-const initialMessages: OperationalMessage[] =
-  [
-    {
-      id: "system-runtime-init",
-
-      role: "system",
-
-      content:
-        "Foundry operational runtime initialized.",
-
-      createdAt:
-        "runtime-init",
-    },
-  ]
+  createContext<
+    InteractionContextValue | undefined
+  >(undefined)
 
 export function InteractionProvider({
   children,
-}: Props) {
-  const [
-    hydrated,
-    setHydrated,
-  ] = useState(false)
-
+}: {
+  children: React.ReactNode
+}) {
   const [
     commandPaletteOpen,
     setCommandPaletteOpen,
   ] = useState(false)
 
   const [
-    selectedCommandIndex,
-    setSelectedCommandIndex,
-  ] = useState(0)
+    operationalEvents,
+    setOperationalEvents,
+  ] = useState<
+    OperationalEvent[]
+  >([
+    {
+      id: crypto.randomUUID(),
+
+      type: "system_event",
+
+      content:
+        "Foundry operational runtime initialized.",
+
+      createdAt:
+        new Date().toISOString(),
+    },
+  ])
 
   const [
     latestCheckpoint,
-    setLatestCheckpoint,
   ] = useState(
-    "phase-2a-runtime-stable",
+    "checkpoint-runtime-v1",
   )
-
-  const [
-    activeCheckpointId,
-    setActiveCheckpointId,
-  ] = useState<string | null>(
-    null,
-  )
-
-  const [
-    checkpointHistory,
-    setCheckpointHistory,
-  ] = useState<
-    CheckpointSnapshot[]
-  >([])
-
-  const [entries, setEntries] =
-    useState<AnyThreadEntry[]>(
-      mockThread,
-    )
-
-  const [
-    operationalMessages,
-    setOperationalMessages,
-  ] = useState<
-    OperationalMessage[]
-  >(initialMessages)
 
   const [
     sessionRuntime,
     setSessionRuntime,
-  ] = useState<SessionRuntime>(
-    defaultSessionRuntime,
-  )
+  ] = useState<SessionRuntime>({
+    currentObjective:
+      "Implement runtime cognition architecture",
 
-  useEffect(() => {
-    const persistedState =
-      loadRuntimeState()
+    activeWorkstream:
+      "Workspace Runtime Evolution",
 
-    if (persistedState) {
-      setLatestCheckpoint(
-        persistedState.latestCheckpoint,
-      )
+    nextAction:
+      "Define workspace isolation architecture",
 
-      setActiveCheckpointId(
-        persistedState.activeCheckpointId,
-      )
+    activeRisks:
+      "Core runtime instability during mutation",
 
-      setCheckpointHistory(
-        persistedState.checkpointHistory,
-      )
+    runtimeState:
+      "Operational",
+  })
 
-      setOperationalMessages(
-        persistedState.operationalMessages,
-      )
+  function openCommandPalette() {
+    setCommandPaletteOpen(true)
+  }
 
-      setSessionRuntime(
-        persistedState.sessionRuntime ??
-          defaultSessionRuntime,
-      )
-    }
+  function closeCommandPalette() {
+    setCommandPaletteOpen(false)
+  }
 
-    setHydrated(true)
-  }, [])
-
-  useEffect(() => {
-    if (!hydrated) {
-      return
-    }
-
-    persistRuntimeState({
-      operationalMessages,
-
-      checkpointHistory,
-
-      activeCheckpointId,
-
-      latestCheckpoint,
-
-      sessionRuntime,
-    })
-  }, [
-    hydrated,
-
-    operationalMessages,
-
-    checkpointHistory,
-
-    activeCheckpointId,
-
-    latestCheckpoint,
-
-    sessionRuntime,
-  ])
-
-  const openCommandPalette =
-    useCallback(() => {
-      setCommandPaletteOpen(true)
-    }, [])
-
-  const closeCommandPalette =
-    useCallback(() => {
-      setCommandPaletteOpen(false)
-    }, [])
-
-  const resetSelectedCommandIndex =
-    useCallback(() => {
-      setSelectedCommandIndex(0)
-    }, [])
-
-  const appendCheckpoint =
-    useCallback(
-      (
-        checkpoint: CheckpointSnapshot,
-      ) => {
-        setCheckpointHistory(
-          (current) => [
-            checkpoint,
-            ...current,
-          ],
-        )
-      },
-      [],
-    )
-
-  const appendEntry = useCallback(
-    (entry: AnyThreadEntry) => {
-      setEntries((current) => [
+  function appendOperationalEvent(
+    event: OperationalEvent,
+  ) {
+    setOperationalEvents(
+      (current) => [
         ...current,
-        entry,
-      ])
-    },
-    [],
-  )
-
-  const appendOperationalMessage =
-    useCallback(
-      (
-        message: OperationalMessage,
-      ) => {
-        setOperationalMessages(
-          (current) => [
-            ...current,
-            message,
-          ],
-        )
-      },
-      [],
+        event,
+      ],
     )
+  }
 
   const value = useMemo(
     () => ({
       commandPaletteOpen,
 
-      selectedCommandIndex,
+      openCommandPalette,
+
+      closeCommandPalette,
 
       latestCheckpoint,
 
-      activeCheckpointId,
+      operationalEvents,
 
-      checkpointHistory,
-
-      entries,
-
-      operationalMessages,
+      appendOperationalEvent,
 
       sessionRuntime,
 
-      openCommandPalette,
-      closeCommandPalette,
-
-      setSelectedCommandIndex,
-
-      resetSelectedCommandIndex,
-
-      setLatestCheckpoint,
-
-      setActiveCheckpointId,
-
       setSessionRuntime,
-
-      appendCheckpoint,
-
-      appendEntry,
-
-      appendOperationalMessage,
     }),
     [
       commandPaletteOpen,
 
-      selectedCommandIndex,
-
       latestCheckpoint,
 
-      activeCheckpointId,
-
-      checkpointHistory,
-
-      entries,
-
-      operationalMessages,
+      operationalEvents,
 
       sessionRuntime,
-
-      openCommandPalette,
-      closeCommandPalette,
-
-      setSelectedCommandIndex,
-
-      resetSelectedCommandIndex,
-
-      setLatestCheckpoint,
-
-      setActiveCheckpointId,
-
-      setSessionRuntime,
-
-      appendCheckpoint,
-
-      appendEntry,
-
-      appendOperationalMessage,
     ],
   )
 
   return (
-    <InteractionContext.Provider value={value}>
+    <InteractionContext.Provider
+      value={value}
+    >
       {children}
     </InteractionContext.Provider>
   )
@@ -369,7 +165,9 @@ export function InteractionProvider({
 
 export function useInteraction() {
   const context =
-    useContext(InteractionContext)
+    useContext(
+      InteractionContext,
+    )
 
   if (!context) {
     throw new Error(

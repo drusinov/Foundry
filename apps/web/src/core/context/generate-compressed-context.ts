@@ -1,21 +1,27 @@
-import type { GitRuntimeState } from "@/core/types/git-runtime"
+import type { GitRuntime } from "@/core/types/git-runtime"
 
 import type { RuntimeImpact } from "@/core/runtime/runtime-impact-engine"
 
-import type { OperationalMessage } from "@/core/types/operational-message"
+type LegacyOperationalMessage =
+  {
+    id: string
+
+    role: "user" | "system"
+
+    content: string
+
+    createdAt: string
+  }
 
 type GenerateCompressedContextInput =
   {
-    gitRuntime:
-      | GitRuntimeState
-      | null
+    gitRuntime: GitRuntime | null
 
-    runtimeImpacts:
-      RuntimeImpact[]
+    runtimeImpacts: RuntimeImpact[]
 
     latestCheckpoint: string
 
-    operationalMessages: OperationalMessage[]
+    operationalMessages: LegacyOperationalMessage[]
   }
 
 export function generateCompressedContext({
@@ -29,97 +35,42 @@ export function generateCompressedContext({
 }: GenerateCompressedContextInput) {
   const recentMessages =
     operationalMessages
-      .slice(-5)
+      .slice(-8)
       .map(
         (message) =>
-          `- ${message.role.toUpperCase()}: ${message.content}`,
+          `${message.role.toUpperCase()}: ${message.content}`,
       )
+      .join("\n\n")
 
-  const uniqueImpacts =
-    Array.from(
-      new Set(
-        runtimeImpacts.flatMap(
-          (impact) =>
-            impact.impacts,
-        ),
-      ),
-    )
+  const runtimeSummary =
+    runtimeImpacts
+      .map(
+        (impact) =>
+          `• ${impact.title}: ${impact.description}`,
+      )
+      .join("\n")
+
+  const changedFiles =
+    gitRuntime?.diffEntries
+      ?.map(
+        (entry) =>
+          `${entry.changeType} ${entry.filePath}`,
+      )
+      .join("\n") ?? "No modified files."
 
   return `
-# FOUNDRY OPERATIONAL CONTINUITY
+FOUNDARY OPERATIONAL CONTINUITY
 
-## CURRENT RUNTIME
+CHECKPOINT:
+${latestCheckpoint}
 
-- Active checkpoint: ${latestCheckpoint}
-- Git branch: ${
-    gitRuntime?.branch ??
-    "unknown"
-  }
-- Latest commit: ${
-    gitRuntime?.latestCommit ??
-    "unknown"
-  }
-- Working tree: ${
-    gitRuntime
-      ?.workingTreeClean
-      ? "clean"
-      : "modified"
-  }
+RUNTIME IMPACT SUMMARY:
+${runtimeSummary || "No runtime impacts detected."}
 
----
+MODIFIED FILES:
+${changedFiles}
 
-## ACTIVE RUNTIME IMPACTS
-
-${uniqueImpacts
-  .map(
-    (impact) =>
-      `- ${impact}`,
-  )
-  .join("\n")}
-
----
-
-## RECENT OPERATIONAL INTERACTION
-
-${recentMessages.join("\n")}
-
----
-
-## RECENT MODIFIED FILES
-
-${
-  gitRuntime?.diffEntries
-    .map(
-      (entry) =>
-        `- ${entry.file}`,
-    )
-    .join("\n") ??
-  "No modified files"
-}
-
----
-
-## CURRENT PRODUCT STATE
-
-Foundry currently supports:
-
-- deterministic interaction runtime
-- operational continuity checkpoints
-- git runtime awareness
-- filesystem runtime awareness
-- runtime impact interpretation
-- embedded operational interaction
-
----
-
-## KNOWN LIMITATIONS
-
-- no persistence layer
-- no AI orchestration runtime
-- no autonomous file mutation
-- no VPS runtime integration
-- operational chat not persisted yet
-
----
-  `.trim()
+RECENT OPERATIONAL EVENTS:
+${recentMessages}
+`.trim()
 }
