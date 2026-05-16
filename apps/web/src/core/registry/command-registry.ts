@@ -5,37 +5,37 @@ import type {
 export const commandRegistry: CommandDefinition[] = [
   {
     id: "open-command-palette",
-    title: "Open Command Palette",
+    label: "Open Command Palette",
     shortcut: ["meta", "k"],
   },
 
   {
     id: "focus-orbit",
-    title: "Focus Orbit",
+    label: "Focus Orbit",
     shortcut: ["g", "o"],
   },
 
   {
     id: "focus-thread",
-    title: "Focus Thread",
+    label: "Focus Thread",
     shortcut: ["g", "t"],
   },
 
   {
     id: "focus-inspector",
-    title: "Focus Inspector",
+    label: "Focus Inspector",
     shortcut: ["g", "i"],
   },
 
   {
     id: "create-brief",
-    title: "Create Brief",
+    label: "Create Brief",
     shortcut: ["c", "b"],
   },
 
   {
     id: "dispatch-run",
-    title: "Dispatch Run",
+    label: "Dispatch Run",
     shortcut: ["meta", "enter"],
   },
 ]

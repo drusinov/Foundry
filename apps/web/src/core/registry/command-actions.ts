@@ -2,12 +2,24 @@ import type {
   CommandId,
 } from "./command-types"
 
+type CommandRuntime = {
+  toggleCommandPalette: () => void
+}
+
+let runtime: CommandRuntime | null = null
+
+export function registerCommandRuntime(
+  nextRuntime: CommandRuntime,
+) {
+  runtime = nextRuntime
+}
+
 export function executeCommand(
   commandId: CommandId,
 ) {
   switch (commandId) {
     case "open-command-palette":
-      console.log("OPEN COMMAND PALETTE")
+      runtime?.toggleCommandPalette()
       return
 
     case "focus-orbit":

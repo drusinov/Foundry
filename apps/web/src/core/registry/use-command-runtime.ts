@@ -2,10 +2,25 @@
 
 import { useEffect } from "react"
 
-import { executeCommand } from "./command-actions"
+import {
+  executeCommand,
+  registerCommandRuntime,
+} from "./command-actions"
+
 import { commandRegistry } from "./command-registry"
 
+import { useInteractionStore } from "../state/interaction-store"
+
 export function useCommandRuntime() {
+  const { toggleCommandPalette } =
+    useInteractionStore()
+
+  useEffect(() => {
+    registerCommandRuntime({
+      toggleCommandPalette,
+    })
+  }, [toggleCommandPalette])
+
   useEffect(() => {
     function handleKeyDown(
       event: KeyboardEvent,

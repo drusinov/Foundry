@@ -1,16 +1,26 @@
 "use client"
 
-import { useCommandRuntime } from "@/core/registry/use-command-runtime"
 import { AppShell } from "@/components/layout/AppShell"
+
 import { OrbitSidebar } from "@/components/system/OrbitSidebar"
 import { InspectorPanel } from "@/components/system/InspectorPanel"
-import { ThreadSurface } from "@/components/thread/ThreadSurface"
-import { CommandPalette } from "@/components/command/CommandPalette"
-import { useCommandPalette } from "@/hooks/useCommandPalette"
 
-export default function HomePage() {
+import { ThreadSurface } from "@/components/thread/ThreadSurface"
+
+import { CommandPalette } from "@/components/command/CommandPalette"
+
+import { useCommandRuntime } from "@/core/registry/use-command-runtime"
+
+import {
+  InteractionProvider,
+  useInteractionStore,
+} from "@/core/state/interaction-store"
+
+function FoundryPage() {
   useCommandRuntime()
-  const { open } = useCommandPalette()
+
+  const { commandPaletteOpen } =
+    useInteractionStore()
 
   return (
     <>
@@ -21,7 +31,17 @@ export default function HomePage() {
         <ThreadSurface />
       </AppShell>
 
-      <CommandPalette open={open} />
+      <CommandPalette
+        open={commandPaletteOpen}
+      />
     </>
+  )
+}
+
+export default function HomePage() {
+  return (
+    <InteractionProvider>
+      <FoundryPage />
+    </InteractionProvider>
   )
 }
