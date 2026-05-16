@@ -1,0 +1,22 @@
+{
+  "name": "foundry",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "^25.8.0",
+    "eslint": "^10.3.0",
+    "prettier": "^3.8.3",
+    "tsx": "^4.22.0",
+    "turbo": "^2.9.14",
+    "typescript": "^6.0.3"
+  },
+  "packageManager": "pnpm@11.1.2"
+}
+

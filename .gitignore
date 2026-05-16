@@ -25,3 +25,26 @@ postgres_data/
 
 # SQLite databases
 *.sqlite3
+
+node_modules
+.next
+dist
+build
+coverage
+
+.env
+.env.*
+!.env.example
+
+.DS_Store
+
+postgres_data
+redis_data
+
+logs
+backups
+
+.vscode
+.idea
+
+
