@@ -15,6 +15,8 @@ import type {
   AnyThreadEntry,
 } from "@/core/thread/types"
 
+import type { OperationalMessage } from "@/core/types/operational-message"
+
 export type CheckpointSnapshot = {
   id: string
 
@@ -35,6 +37,8 @@ type InteractionContextValue = {
   checkpointHistory: CheckpointSnapshot[]
 
   entries: AnyThreadEntry[]
+
+  operationalMessages: OperationalMessage[]
 
   openCommandPalette: () => void
   closeCommandPalette: () => void
@@ -60,6 +64,10 @@ type InteractionContextValue = {
   appendEntry: (
     entry: AnyThreadEntry,
   ) => void
+
+  appendOperationalMessage: (
+    message: OperationalMessage,
+  ) => void
 }
 
 const InteractionContext =
@@ -70,6 +78,21 @@ const InteractionContext =
 type Props = {
   children: ReactNode
 }
+
+const initialMessages: OperationalMessage[] =
+  [
+    {
+      id: crypto.randomUUID(),
+
+      role: "system",
+
+      content:
+        "Foundry operational runtime initialized.",
+
+      createdAt:
+        new Date().toISOString(),
+    },
+  ]
 
 export function InteractionProvider({
   children,
@@ -107,6 +130,13 @@ export function InteractionProvider({
     useState<AnyThreadEntry[]>(
       mockThread,
     )
+
+  const [
+    operationalMessages,
+    setOperationalMessages,
+  ] = useState<
+    OperationalMessage[]
+  >(initialMessages)
 
   const openCommandPalette =
     useCallback(() => {
@@ -148,6 +178,21 @@ export function InteractionProvider({
     [],
   )
 
+  const appendOperationalMessage =
+    useCallback(
+      (
+        message: OperationalMessage,
+      ) => {
+        setOperationalMessages(
+          (current) => [
+            ...current,
+            message,
+          ],
+        )
+      },
+      [],
+    )
+
   const value = useMemo(
     () => ({
       commandPaletteOpen,
@@ -162,6 +207,8 @@ export function InteractionProvider({
 
       entries,
 
+      operationalMessages,
+
       openCommandPalette,
       closeCommandPalette,
 
@@ -176,6 +223,8 @@ export function InteractionProvider({
       appendCheckpoint,
 
       appendEntry,
+
+      appendOperationalMessage,
     }),
     [
       commandPaletteOpen,
@@ -190,6 +239,8 @@ export function InteractionProvider({
 
       entries,
 
+      operationalMessages,
+
       openCommandPalette,
       closeCommandPalette,
 
@@ -204,6 +255,8 @@ export function InteractionProvider({
       appendCheckpoint,
 
       appendEntry,
+
+      appendOperationalMessage,
     ],
   )
 

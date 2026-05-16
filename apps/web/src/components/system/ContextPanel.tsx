@@ -6,6 +6,8 @@ import { useInteraction } from "@/core/state/interaction-store"
 
 import { generateContextSummary } from "@/core/context/generate-context-summary"
 
+import { generateCompressedContext } from "@/core/context/generate-compressed-context"
+
 import { downloadContextFile } from "@/core/context/download-context-file"
 
 import { generateRuntimeImpacts } from "@/core/runtime/runtime-impact-engine"
@@ -29,6 +31,8 @@ export function ContextPanel() {
     entries,
 
     appendEntry,
+
+    operationalMessages,
   } = useInteraction()
 
   const gitRuntime =
@@ -59,15 +63,36 @@ export function ContextPanel() {
       )
     }, [gitRuntime])
 
+  const compressedContext =
+    useMemo(() => {
+      return generateCompressedContext({
+        gitRuntime,
+
+        runtimeImpacts,
+
+        latestCheckpoint,
+
+        operationalMessages,
+      })
+    }, [
+      gitRuntime,
+
+      runtimeImpacts,
+
+      latestCheckpoint,
+
+      operationalMessages,
+    ])
+
   async function copyContextSummary() {
     await navigator.clipboard.writeText(
-      generatedSummary,
+      compressedContext,
     )
   }
 
   function exportContextFile() {
     downloadContextFile(
-      generatedSummary,
+      compressedContext,
     )
   }
 
@@ -108,7 +133,7 @@ export function ContextPanel() {
             onClick={copyContextSummary}
             className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-3 py-1 text-xs font-medium text-cyan-300 transition hover:bg-cyan-500/20"
           >
-            Copy Context
+            Copy Continuity
           </button>
 
           <button
@@ -134,6 +159,16 @@ export function ContextPanel() {
               mockContextDocument.project
                 .description
             }
+          </div>
+        </div>
+
+        <div>
+          <div className="mb-2 text-xs uppercase tracking-wide text-zinc-500">
+            Compressed Continuity Payload
+          </div>
+
+          <div className="rounded-xl border border-cyan-500/10 bg-cyan-500/5 p-3 font-mono text-[11px] leading-6 text-zinc-300 whitespace-pre-wrap">
+            {compressedContext}
           </div>
         </div>
 
@@ -197,36 +232,6 @@ export function ContextPanel() {
                     }
                   </span>
                 </div>
-
-                {gitRuntime.diffEntries
-                  .length > 0 && (
-                  <div>
-                    <div className="mb-2 text-[10px] uppercase tracking-wide text-zinc-500">
-                      Runtime Diff
-                    </div>
-
-                    <div className="space-y-1">
-                      {gitRuntime.diffEntries.map(
-                        (entry) => (
-                          <div
-                            key={entry.file}
-                            className="flex items-center justify-between gap-2 rounded-md border border-white/5 bg-white/5 px-2 py-1"
-                          >
-                            <span className="text-yellow-400">
-                              {
-                                entry.status
-                              }
-                            </span>
-
-                            <span className="truncate font-mono text-[11px] text-zinc-300">
-                              {entry.file}
-                            </span>
-                          </div>
-                        ),
-                      )}
-                    </div>
-                  </div>
-                )}
               </div>
             ) : (
               <div className="text-xs text-zinc-500">
@@ -236,104 +241,45 @@ export function ContextPanel() {
           </div>
         </div>
 
-        {runtimeImpacts.length > 0 && (
-          <div>
-            <div className="mb-2 text-xs uppercase tracking-wide text-zinc-500">
-              Runtime Impact Analysis
-            </div>
-
-            <div className="space-y-2">
-              {runtimeImpacts.map(
-                (impact) => (
-                  <div
-                    key={impact.title}
-                    className="rounded-xl border border-cyan-500/10 bg-cyan-500/5 p-3"
-                  >
-                    <div className="truncate font-mono text-[11px] text-cyan-300">
-                      {impact.title}
-                    </div>
-
-                    <div className="mt-2 space-y-1">
-                      {impact.impacts.map(
-                        (
-                          runtimeImpact,
-                        ) => (
-                          <div
-                            key={
-                              runtimeImpact
-                            }
-                            className="text-[11px] text-zinc-300"
-                          >
-                            •{" "}
-                            {
-                              runtimeImpact
-                            }
-                          </div>
-                        ),
-                      )}
-                    </div>
-                  </div>
-                ),
-              )}
-            </div>
-          </div>
-        )}
-
         <div>
           <div className="mb-2 text-xs uppercase tracking-wide text-zinc-500">
-            File Runtime
+            Runtime Impact Analysis
           </div>
 
-          <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-            {fileRuntime ? (
-              <div>
-                <div className="mb-3 flex items-center justify-between text-xs">
-                  <span className="text-zinc-500">
-                    Total Files
-                  </span>
+          <div className="space-y-2">
+            {runtimeImpacts.map(
+              (impact) => (
+                <div
+                  key={impact.title}
+                  className="rounded-xl border border-cyan-500/10 bg-cyan-500/5 p-3"
+                >
+                  <div className="truncate font-mono text-[11px] text-cyan-300">
+                    {impact.title}
+                  </div>
 
-                  <span className="text-white">
-                    {
-                      fileRuntime.totalFiles
-                    }
-                  </span>
+                  <div className="mt-2 space-y-1">
+                    {impact.impacts.map(
+                      (
+                        runtimeImpact,
+                      ) => (
+                        <div
+                          key={
+                            runtimeImpact
+                          }
+                          className="text-[11px] text-zinc-300"
+                        >
+                          •{" "}
+                          {
+                            runtimeImpact
+                          }
+                        </div>
+                      ),
+                    )}
+                  </div>
                 </div>
-
-                <div className="space-y-1">
-                  {fileRuntime.recentFiles.map(
-                    (file) => (
-                      <div
-                        key={file}
-                        className="truncate font-mono text-[11px] text-zinc-400"
-                      >
-                        {file}
-                      </div>
-                    ),
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="text-xs text-zinc-500">
-                Loading filesystem runtime...
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div>
-          <div className="mb-1 text-xs uppercase tracking-wide text-zinc-500">
-            Active Tasks
-          </div>
-
-          <ul className="space-y-1">
-            {mockContextDocument.activeTasks.map(
-              (task) => (
-                <li key={task}>
-                  • {task}
-                </li>
               ),
             )}
-          </ul>
+          </div>
         </div>
 
         <div>
@@ -398,16 +344,6 @@ export function ContextPanel() {
                 </div>
               ),
             )}
-          </div>
-        </div>
-
-        <div>
-          <div className="mb-1 text-xs uppercase tracking-wide text-zinc-500">
-            Generated Context Summary
-          </div>
-
-          <div className="rounded-xl border border-white/10 bg-black/30 p-3 font-mono text-xs leading-6 text-zinc-300 whitespace-pre-wrap">
-            {generatedSummary}
           </div>
         </div>
       </div>
