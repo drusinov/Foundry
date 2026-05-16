@@ -1,19 +1,15 @@
-import { colors } from "@foundry/tokens"
+import { AppShell } from "@/components/layout/AppShell"
+import { OrbitSidebar } from "@/components/system/OrbitSidebar"
+import { InspectorPanel } from "@/components/system/InspectorPanel"
+import { ThreadSurface } from "@/components/thread/ThreadSurface"
 
-export default function Home() {
+export default function HomePage() {
   return (
-    <main
-      style={{
-        background: colors.background,
-        color: colors.textPrimary,
-        minHeight: "100vh",
-        padding: "40px",
-        fontFamily: "sans-serif",
-      }}
+    <AppShell
+      sidebar={<OrbitSidebar />}
+      inspector={<InspectorPanel />}
     >
-      <h1>Foundry</h1>
-
-      <pre>{JSON.stringify(colors, null, 2)}</pre>
-    </main>
+      <ThreadSurface />
+    </AppShell>
   )
 }
