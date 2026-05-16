@@ -1,6 +1,6 @@
 import { useInteraction } from "@/core/state/interaction-store"
 
-import { renderEntry } from "@/core/thread/render-entry"
+import { renderThreadEntry } from "@/core/thread/render-entry"
 
 export function ThreadSurface() {
   const { entries } =
@@ -13,7 +13,7 @@ export function ThreadSurface() {
           key={entry.id}
           className="rounded-xl border border-white/5 bg-black/20 p-4"
         >
-          {renderEntry(entry)}
+          {renderThreadEntry(entry)}
         </div>
       ))}
     </div>

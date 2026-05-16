@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -16,6 +17,17 @@ import type {
 } from "@/core/thread/types"
 
 import type { OperationalMessage } from "@/core/types/operational-message"
+
+import type { SessionRuntime } from "@/core/types/session-runtime"
+
+import {
+  defaultSessionRuntime,
+} from "@/core/types/session-runtime"
+
+import {
+  loadRuntimeState,
+  persistRuntimeState,
+} from "@/core/state/runtime-persistence"
 
 export type CheckpointSnapshot = {
   id: string
@@ -40,6 +52,8 @@ type InteractionContextValue = {
 
   operationalMessages: OperationalMessage[]
 
+  sessionRuntime: SessionRuntime
+
   openCommandPalette: () => void
   closeCommandPalette: () => void
 
@@ -55,6 +69,10 @@ type InteractionContextValue = {
 
   setActiveCheckpointId: (
     checkpointId: string,
+  ) => void
+
+  setSessionRuntime: (
+    runtime: SessionRuntime,
   ) => void
 
   appendCheckpoint: (
@@ -82,7 +100,7 @@ type Props = {
 const initialMessages: OperationalMessage[] =
   [
     {
-      id: crypto.randomUUID(),
+      id: "system-runtime-init",
 
       role: "system",
 
@@ -90,13 +108,18 @@ const initialMessages: OperationalMessage[] =
         "Foundry operational runtime initialized.",
 
       createdAt:
-        new Date().toISOString(),
+        "runtime-init",
     },
   ]
 
 export function InteractionProvider({
   children,
 }: Props) {
+  const [
+    hydrated,
+    setHydrated,
+  ] = useState(false)
+
   const [
     commandPaletteOpen,
     setCommandPaletteOpen,
@@ -117,14 +140,16 @@ export function InteractionProvider({
   const [
     activeCheckpointId,
     setActiveCheckpointId,
-  ] = useState<string | null>(null)
+  ] = useState<string | null>(
+    null,
+  )
 
   const [
     checkpointHistory,
     setCheckpointHistory,
-  ] = useState<CheckpointSnapshot[]>(
-    [],
-  )
+  ] = useState<
+    CheckpointSnapshot[]
+  >([])
 
   const [entries, setEntries] =
     useState<AnyThreadEntry[]>(
@@ -137,6 +162,73 @@ export function InteractionProvider({
   ] = useState<
     OperationalMessage[]
   >(initialMessages)
+
+  const [
+    sessionRuntime,
+    setSessionRuntime,
+  ] = useState<SessionRuntime>(
+    defaultSessionRuntime,
+  )
+
+  useEffect(() => {
+    const persistedState =
+      loadRuntimeState()
+
+    if (persistedState) {
+      setLatestCheckpoint(
+        persistedState.latestCheckpoint,
+      )
+
+      setActiveCheckpointId(
+        persistedState.activeCheckpointId,
+      )
+
+      setCheckpointHistory(
+        persistedState.checkpointHistory,
+      )
+
+      setOperationalMessages(
+        persistedState.operationalMessages,
+      )
+
+      setSessionRuntime(
+        persistedState.sessionRuntime ??
+          defaultSessionRuntime,
+      )
+    }
+
+    setHydrated(true)
+  }, [])
+
+  useEffect(() => {
+    if (!hydrated) {
+      return
+    }
+
+    persistRuntimeState({
+      operationalMessages,
+
+      checkpointHistory,
+
+      activeCheckpointId,
+
+      latestCheckpoint,
+
+      sessionRuntime,
+    })
+  }, [
+    hydrated,
+
+    operationalMessages,
+
+    checkpointHistory,
+
+    activeCheckpointId,
+
+    latestCheckpoint,
+
+    sessionRuntime,
+  ])
 
   const openCommandPalette =
     useCallback(() => {
@@ -209,6 +301,8 @@ export function InteractionProvider({
 
       operationalMessages,
 
+      sessionRuntime,
+
       openCommandPalette,
       closeCommandPalette,
 
@@ -219,6 +313,8 @@ export function InteractionProvider({
       setLatestCheckpoint,
 
       setActiveCheckpointId,
+
+      setSessionRuntime,
 
       appendCheckpoint,
 
@@ -241,6 +337,8 @@ export function InteractionProvider({
 
       operationalMessages,
 
+      sessionRuntime,
+
       openCommandPalette,
       closeCommandPalette,
 
@@ -251,6 +349,8 @@ export function InteractionProvider({
       setLatestCheckpoint,
 
       setActiveCheckpointId,
+
+      setSessionRuntime,
 
       appendCheckpoint,
 
