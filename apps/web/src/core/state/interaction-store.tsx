@@ -15,12 +15,24 @@ import type {
   AnyThreadEntry,
 } from "@/core/thread/types"
 
+export type CheckpointSnapshot = {
+  id: string
+
+  createdAt: string
+
+  summary: string
+}
+
 type InteractionContextValue = {
   commandPaletteOpen: boolean
 
   selectedCommandIndex: number
 
   latestCheckpoint: string
+
+  activeCheckpointId: string | null
+
+  checkpointHistory: CheckpointSnapshot[]
 
   entries: AnyThreadEntry[]
 
@@ -35,6 +47,14 @@ type InteractionContextValue = {
 
   setLatestCheckpoint: (
     checkpoint: string,
+  ) => void
+
+  setActiveCheckpointId: (
+    checkpointId: string,
+  ) => void
+
+  appendCheckpoint: (
+    checkpoint: CheckpointSnapshot,
   ) => void
 
   appendEntry: (
@@ -71,6 +91,18 @@ export function InteractionProvider({
     "phase-2a-runtime-stable",
   )
 
+  const [
+    activeCheckpointId,
+    setActiveCheckpointId,
+  ] = useState<string | null>(null)
+
+  const [
+    checkpointHistory,
+    setCheckpointHistory,
+  ] = useState<CheckpointSnapshot[]>(
+    [],
+  )
+
   const [entries, setEntries] =
     useState<AnyThreadEntry[]>(
       mockThread,
@@ -91,6 +123,21 @@ export function InteractionProvider({
       setSelectedCommandIndex(0)
     }, [])
 
+  const appendCheckpoint =
+    useCallback(
+      (
+        checkpoint: CheckpointSnapshot,
+      ) => {
+        setCheckpointHistory(
+          (current) => [
+            checkpoint,
+            ...current,
+          ],
+        )
+      },
+      [],
+    )
+
   const appendEntry = useCallback(
     (entry: AnyThreadEntry) => {
       setEntries((current) => [
@@ -109,6 +156,10 @@ export function InteractionProvider({
 
       latestCheckpoint,
 
+      activeCheckpointId,
+
+      checkpointHistory,
+
       entries,
 
       openCommandPalette,
@@ -119,6 +170,10 @@ export function InteractionProvider({
       resetSelectedCommandIndex,
 
       setLatestCheckpoint,
+
+      setActiveCheckpointId,
+
+      appendCheckpoint,
 
       appendEntry,
     }),
@@ -129,6 +184,10 @@ export function InteractionProvider({
 
       latestCheckpoint,
 
+      activeCheckpointId,
+
+      checkpointHistory,
+
       entries,
 
       openCommandPalette,
@@ -139,6 +198,10 @@ export function InteractionProvider({
       resetSelectedCommandIndex,
 
       setLatestCheckpoint,
+
+      setActiveCheckpointId,
+
+      appendCheckpoint,
 
       appendEntry,
     ],

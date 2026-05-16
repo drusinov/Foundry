@@ -13,7 +13,16 @@ import { mockContextDocument } from "@/core/types/mock-context-document"
 export function ContextPanel() {
   const {
     latestCheckpoint,
+
+    activeCheckpointId,
+
+    setActiveCheckpointId,
+
+    checkpointHistory,
+
     entries,
+
+    appendEntry,
   } = useInteraction()
 
   const generatedSummary =
@@ -37,6 +46,31 @@ export function ContextPanel() {
     downloadContextFile(
       generatedSummary,
     )
+  }
+
+  function exportCheckpoint(
+    summary: string,
+  ) {
+    downloadContextFile(summary)
+  }
+
+  function restoreCheckpoint(
+    checkpointId: string,
+  ) {
+    setActiveCheckpointId(
+      checkpointId,
+    )
+
+    appendEntry({
+      id: crypto.randomUUID(),
+
+      createdAt: new Date().toISOString(),
+
+      type: "system",
+
+      message:
+        `CHECKPOINT RESTORED · ${checkpointId}`,
+    })
   }
 
   return (
@@ -98,11 +132,66 @@ export function ContextPanel() {
 
         <div>
           <div className="mb-1 text-xs uppercase tracking-wide text-zinc-500">
-            Last Checkpoint
+            Active Checkpoint
           </div>
 
           <div className="font-mono text-xs text-cyan-300">
-            {latestCheckpoint}
+            {activeCheckpointId ??
+              "No active checkpoint"}
+          </div>
+        </div>
+
+        <div>
+          <div className="mb-2 text-xs uppercase tracking-wide text-zinc-500">
+            Checkpoint History
+          </div>
+
+          <div className="space-y-2">
+            {checkpointHistory.map(
+              (checkpoint) => (
+                <div
+                  key={checkpoint.id}
+                  className={`rounded-lg border p-3 ${
+                    activeCheckpointId ===
+                    checkpoint.id
+                      ? "border-cyan-500/40 bg-cyan-500/10"
+                      : "border-white/10 bg-black/20"
+                  }`}
+                >
+                  <div className="font-mono text-xs text-cyan-300">
+                    {checkpoint.id}
+                  </div>
+
+                  <div className="mt-1 text-[11px] text-zinc-500">
+                    {checkpoint.createdAt}
+                  </div>
+
+                  <div className="mt-3 flex items-center gap-2">
+                    <button
+                      onClick={() =>
+                        restoreCheckpoint(
+                          checkpoint.id,
+                        )
+                      }
+                      className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-2 py-1 text-[11px] text-cyan-300 transition hover:bg-cyan-500/20"
+                    >
+                      Restore
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        exportCheckpoint(
+                          checkpoint.summary,
+                        )
+                      }
+                      className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white transition hover:bg-white/10"
+                    >
+                      Export Snapshot
+                    </button>
+                  </div>
+                </div>
+              ),
+            )}
           </div>
         </div>
 

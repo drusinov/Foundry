@@ -1,25 +1,57 @@
 import type { CommandDefinition } from "./command-types"
 
+import { generateContextSummary } from "@/core/context/generate-context-summary"
+
 import { useInteraction } from "@/core/state/interaction-store"
 
 export function useCommandActions() {
   const {
     appendEntry,
     closeCommandPalette,
+
+    latestCheckpoint,
+
+    entries,
+
     setLatestCheckpoint,
+
+    setActiveCheckpointId,
+
+    appendCheckpoint,
   } = useInteraction()
 
   function executeCommand(
     command: CommandDefinition,
   ) {
     let message =
-      `Executed: ${command.label}`
+      `COMMAND EXECUTED · ${command.label}`
 
     if (command.id === "save-checkpoint") {
       const checkpoint =
         `checkpoint-${Date.now()}`
 
       setLatestCheckpoint(checkpoint)
+
+      setActiveCheckpointId(
+        checkpoint,
+      )
+
+      const summary =
+        generateContextSummary({
+          latestCheckpoint:
+            checkpoint,
+
+          entries,
+        })
+
+      appendCheckpoint({
+        id: checkpoint,
+
+        createdAt:
+          new Date().toISOString(),
+
+        summary,
+      })
 
       message =
         `CHECKPOINT SAVED · ${checkpoint}`
@@ -29,7 +61,7 @@ export function useCommandActions() {
       command.id === "restore-checkpoint"
     ) {
       message =
-        "CHECKPOINT RESTORED"
+        `CHECKPOINT RESTORE REQUESTED`
     }
 
     if (command.id === "push-updates") {
