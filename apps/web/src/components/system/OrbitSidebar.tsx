@@ -23,15 +23,7 @@ export function OrbitSidebar() {
           {projects.map((project) => (
             <button
               key={project}
-              className="
-                w-full rounded-xl border border-white/5
-                bg-white/[0.03]
-                px-4 py-3
-                text-left
-                transition-all
-                hover:border-white/10
-                hover:bg-white/[0.05]
-              "
+              className="w-full rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3 text-left transition-all hover:border-white/10 hover:bg-white/[0.05]"
             >
               {project}
             </button>

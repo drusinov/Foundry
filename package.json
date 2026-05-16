@@ -17,6 +17,10 @@
     "turbo": "^2.9.14",
     "typescript": "^6.0.3"
   },
-  "packageManager": "pnpm@11.1.2"
+  "packageManager": "pnpm@11.1.2",
+  "dependencies": {
+    "cmdk": "^1.1.1",
+    "framer-motion": "^12.38.0",
+    "lucide-react": "^1.16.0"
+  }
 }
-
