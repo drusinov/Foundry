@@ -10,63 +10,135 @@ import {
 } from "react"
 
 import { mockThread } from "@/core/thread/mock-thread"
-import type { ThreadEntry } from "@/core/thread/types"
+
+import type {
+  AnyThreadEntry,
+} from "@/core/thread/types"
 
 type InteractionContextValue = {
   commandPaletteOpen: boolean
 
-  entries: ThreadEntry[]
+  selectedCommandIndex: number
+
+  latestCheckpoint: string
+
+  entries: AnyThreadEntry[]
 
   openCommandPalette: () => void
   closeCommandPalette: () => void
 
-  appendEntry: (entry: ThreadEntry) => void
+  setSelectedCommandIndex: (
+    index: number,
+  ) => void
+
+  resetSelectedCommandIndex: () => void
+
+  setLatestCheckpoint: (
+    checkpoint: string,
+  ) => void
+
+  appendEntry: (
+    entry: AnyThreadEntry,
+  ) => void
 }
 
 const InteractionContext =
-  createContext<InteractionContextValue | null>(null)
+  createContext<InteractionContextValue | null>(
+    null,
+  )
 
 type Props = {
   children: ReactNode
 }
 
-export function InteractionProvider({ children }: Props) {
-  const [commandPaletteOpen, setCommandPaletteOpen] =
-    useState(false)
+export function InteractionProvider({
+  children,
+}: Props) {
+  const [
+    commandPaletteOpen,
+    setCommandPaletteOpen,
+  ] = useState(false)
+
+  const [
+    selectedCommandIndex,
+    setSelectedCommandIndex,
+  ] = useState(0)
+
+  const [
+    latestCheckpoint,
+    setLatestCheckpoint,
+  ] = useState(
+    "phase-2a-runtime-stable",
+  )
 
   const [entries, setEntries] =
-    useState<ThreadEntry[]>(mockThread)
+    useState<AnyThreadEntry[]>(
+      mockThread,
+    )
 
-  const openCommandPalette = useCallback(() => {
-    setCommandPaletteOpen(true)
-  }, [])
+  const openCommandPalette =
+    useCallback(() => {
+      setCommandPaletteOpen(true)
+    }, [])
 
-  const closeCommandPalette = useCallback(() => {
-    setCommandPaletteOpen(false)
-  }, [])
+  const closeCommandPalette =
+    useCallback(() => {
+      setCommandPaletteOpen(false)
+    }, [])
 
-  const appendEntry = useCallback((entry: ThreadEntry) => {
-    setEntries((current) => [...current, entry])
-  }, [])
+  const resetSelectedCommandIndex =
+    useCallback(() => {
+      setSelectedCommandIndex(0)
+    }, [])
+
+  const appendEntry = useCallback(
+    (entry: AnyThreadEntry) => {
+      setEntries((current) => [
+        ...current,
+        entry,
+      ])
+    },
+    [],
+  )
 
   const value = useMemo(
     () => ({
       commandPaletteOpen,
 
+      selectedCommandIndex,
+
+      latestCheckpoint,
+
       entries,
 
       openCommandPalette,
       closeCommandPalette,
+
+      setSelectedCommandIndex,
+
+      resetSelectedCommandIndex,
+
+      setLatestCheckpoint,
 
       appendEntry,
     }),
     [
       commandPaletteOpen,
 
+      selectedCommandIndex,
+
+      latestCheckpoint,
+
       entries,
 
       openCommandPalette,
       closeCommandPalette,
+
+      setSelectedCommandIndex,
+
+      resetSelectedCommandIndex,
+
+      setLatestCheckpoint,
 
       appendEntry,
     ],
@@ -80,7 +152,8 @@ export function InteractionProvider({ children }: Props) {
 }
 
 export function useInteraction() {
-  const context = useContext(InteractionContext)
+  const context =
+    useContext(InteractionContext)
 
   if (!context) {
     throw new Error(

@@ -6,17 +6,50 @@ export function useCommandActions() {
   const {
     appendEntry,
     closeCommandPalette,
+    setLatestCheckpoint,
   } = useInteraction()
 
-  function executeCommand(command: CommandDefinition) {
+  function executeCommand(
+    command: CommandDefinition,
+  ) {
+    let message =
+      `Executed: ${command.label}`
+
+    if (command.id === "save-checkpoint") {
+      const checkpoint =
+        `checkpoint-${Date.now()}`
+
+      setLatestCheckpoint(checkpoint)
+
+      message =
+        `CHECKPOINT SAVED · ${checkpoint}`
+    }
+
+    if (
+      command.id === "restore-checkpoint"
+    ) {
+      message =
+        "CHECKPOINT RESTORED"
+    }
+
+    if (command.id === "push-updates") {
+      message =
+        "GIT PUSH COMPLETED"
+    }
+
+    if (command.id === "health-check") {
+      message =
+        "SYSTEM HEALTH OK"
+    }
+
     appendEntry({
       id: crypto.randomUUID(),
 
+      createdAt: new Date().toISOString(),
+
       type: "system",
 
-      title: "Command Executed",
-
-      content: `Executed: ${command.label}`,
+      message,
     })
 
     closeCommandPalette()

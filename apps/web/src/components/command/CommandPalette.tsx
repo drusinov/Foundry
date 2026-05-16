@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react"
 
+import { useInteraction } from "@/core/state/interaction-store"
+
 import { commandRegistry } from "@/core/registry/command-registry"
 import { useCommandActions } from "@/core/registry/command-actions"
 
@@ -9,10 +11,19 @@ type Props = {
   open: boolean
 }
 
-export function CommandPalette({ open }: Props) {
+export function CommandPalette({
+  open,
+}: Props) {
   const [query, setQuery] = useState("")
 
-  const { executeCommand } = useCommandActions()
+  const {
+    selectedCommandIndex,
+    setSelectedCommandIndex,
+    resetSelectedCommandIndex,
+  } = useInteraction()
+
+  const { executeCommand } =
+    useCommandActions()
 
   const filteredCommands = useMemo(() => {
     return commandRegistry.filter((command) =>
@@ -31,35 +42,51 @@ export function CommandPalette({ open }: Props) {
       <div className="mt-32 w-full max-w-3xl overflow-hidden rounded-2xl border border-white/10 bg-[#11131A] shadow-2xl">
         <input
           value={query}
-          onChange={(event) =>
+          onChange={(event) => {
             setQuery(event.target.value)
-          }
+
+            resetSelectedCommandIndex()
+          }}
           placeholder="Search commands..."
           className="w-full border-b border-white/10 bg-transparent px-6 py-5 text-sm text-white outline-none"
         />
 
         <div className="max-h-[420px] overflow-y-auto">
-          {filteredCommands.map((command) => (
-            <button
-              key={command.id}
-              onClick={() => executeCommand(command)}
-              className="flex w-full items-center justify-between border-b border-white/5 px-6 py-4 text-left transition hover:bg-white/5"
-            >
-              <div>
-                <div className="text-sm font-medium text-white">
-                  {command.label}
+          {filteredCommands.map(
+            (command, index) => (
+              <button
+                key={command.id}
+                onMouseEnter={() =>
+                  setSelectedCommandIndex(
+                    index,
+                  )
+                }
+                onClick={() =>
+                  executeCommand(command)
+                }
+                className={`flex w-full items-center justify-between border-b border-white/5 px-6 py-4 text-left transition ${
+                  selectedCommandIndex ===
+                  index
+                    ? "bg-white/10"
+                    : "hover:bg-white/5"
+                }`}
+              >
+                <div>
+                  <div className="text-sm font-medium text-white">
+                    {command.label}
+                  </div>
+
+                  <div className="mt-1 text-xs text-zinc-400">
+                    {command.description}
+                  </div>
                 </div>
 
-                <div className="mt-1 text-xs text-zinc-400">
-                  {command.description}
+                <div className="text-xs text-zinc-500">
+                  {command.group}
                 </div>
-              </div>
-
-              <div className="text-xs text-zinc-500">
-                {command.group}
-              </div>
-            </button>
-          ))}
+              </button>
+            ),
+          )}
         </div>
       </div>
     </div>

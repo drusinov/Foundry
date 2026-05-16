@@ -6,6 +6,8 @@ import { CommandPalette } from "@/components/command/CommandPalette"
 
 import { ThreadSurface } from "@/components/thread/ThreadSurface"
 
+import { ContextPanel } from "@/components/system/ContextPanel"
+
 import { useCommandRuntime } from "@/core/registry/use-command-runtime"
 
 import {
@@ -13,8 +15,12 @@ import {
   useInteraction,
 } from "@/core/state/interaction-store"
 
+import { useCommandPaletteKeyboard } from "@/hooks/useCommandPaletteKeyboard"
+
 function FoundryPage() {
   useCommandRuntime()
+
+  useCommandPaletteKeyboard()
 
   const {
     commandPaletteOpen,
@@ -23,8 +29,8 @@ function FoundryPage() {
 
   return (
     <AppShell>
-      <div className="flex h-full flex-col">
-        <div className="border-b border-white/10 p-4">
+      <div className="flex h-screen flex-col overflow-hidden">
+        <div className="sticky top-0 z-10 border-b border-white/10 bg-[#070B14]/95 p-4 backdrop-blur">
           <button
             onClick={openCommandPalette}
             className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white transition hover:bg-white/10"
@@ -34,7 +40,15 @@ function FoundryPage() {
         </div>
 
         <div className="flex-1 overflow-hidden p-6">
-          <ThreadSurface />
+          <div className="grid h-full grid-cols-[1fr_360px] gap-6 overflow-hidden">
+            <div className="overflow-y-auto pr-2">
+              <ThreadSurface />
+            </div>
+
+            <div className="overflow-y-auto pr-2">
+              <ContextPanel />
+            </div>
+          </div>
         </div>
       </div>
 
