@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server"
+import fs from "node:fs"
 
 export const dynamic = "force-dynamic"
 
-const CLAUDE_MODEL = "claude-opus-4-5"
+const CLAUDE_MODEL    = "claude-opus-4-5"
+const REGISTRY_PATH  = "/opt/foundry/forged-apps.json"
 
-// Claude acts as a pure code generator — returns only JSON, no prose
 const GENERATOR_SYSTEM = `
 You are a Next.js app code generator. You generate complete, deployable Next.js apps.
 
@@ -12,17 +13,34 @@ Your ENTIRE response must be a single valid JSON object mapping file paths to fi
 No markdown. No backticks. No explanation. No preamble. Just the raw JSON object.
 
 Example response format:
-{"package.json":"...","next.config.mjs":"...","src/app/page.tsx":"..."}
+{"package.json":"...","next.config.js":"...","src/app/page.tsx":"..."}
 `.trim()
 
-function slugify(description: string): string {
-  return description
+function slugify(text: string): string {
+  return text
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, "")
     .trim()
     .replace(/\s+/g, "-")
-    .slice(0, 32)
+    .replace(/-+/g, "-")
+    .slice(0, 48)
     .replace(/-+$/, "") || "app"
+}
+
+function uniqueSlug(base: string): string {
+  let existing: { slug: string }[] = []
+  try {
+    if (fs.existsSync(REGISTRY_PATH)) {
+      existing = JSON.parse(fs.readFileSync(REGISTRY_PATH, "utf8"))
+    }
+  } catch {
+    existing = []
+  }
+  const taken = new Set(existing.map((a) => a.slug))
+  if (!taken.has(base)) return base
+  let n = 2
+  while (taken.has(`${base}-${n}`)) n++
+  return `${base}-${n}`
 }
 
 export async function POST(request: Request) {
@@ -37,7 +55,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Anthropic API key is required" }, { status: 400 })
     }
 
-    const slug = `${slugify(description)}-${Date.now().toString(36)}`
+    const slug = uniqueSlug(slugify(description))
 
     const userPrompt = `
 Generate a complete Next.js 14 app.
@@ -46,38 +64,36 @@ App description: "${description}"
 App slug: "${slug}"
 Deployment path: "/apps/${slug}"
 
-Required files (include all of these):
+Required files:
 - package.json
 - next.config.js
-- tailwind.config.ts
+- tailwind.config.js
 - postcss.config.mjs
 - src/app/layout.tsx
 - src/app/page.tsx
 - src/app/globals.css
 
-Rules:
-1. next.config.mjs MUST set: basePath: '/apps/${slug}'
-2. package.json: name="${slug}", deps=(next@14, react, react-dom, typescript, @types/node, @types/react, @types/react-dom, tailwindcss, postcss, autoprefixer), scripts=(dev, build, start, lint)
-3. Use Tailwind CSS properly with dark theme
-4. Implement the described functionality fully and polishedly
-5. Keep files concise but complete
-6. No external API calls unless the description specifically requires them
-
-Remember: respond with ONLY the JSON object. Nothing else.
+STRICT RULES:
+1. next.config.js MUST be plain CommonJS: /** @type {import('next').NextConfig} */ const nextConfig = { basePath: '/apps/${slug}', trailingSlash: true } module.exports = nextConfig
+2. tailwind.config.js MUST be plain CommonJS (module.exports), NOT .ts
+3. package.json deps: next@14, react@^18, react-dom@^18, typescript@^5, @types/node@^20, @types/react@^18, @types/react-dom@^18, tailwindcss@^3, postcss@^8, autoprefixer@^10
+4. scripts: "dev": "next dev", "build": "next build", "start": "next start"
+5. Dark theme, visually polished, implement the described functionality fully
+6. Respond with ONLY the JSON object.
     `.trim()
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        "x-api-key": anthropicKey,
+        "Content-Type":      "application/json",
+        "x-api-key":         anthropicKey,
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: CLAUDE_MODEL,
+        model:      CLAUDE_MODEL,
         max_tokens: 8000,
-        system: GENERATOR_SYSTEM,
-        messages: [{ role: "user", content: userPrompt }],
+        system:     GENERATOR_SYSTEM,
+        messages:   [{ role: "user", content: userPrompt }],
       }),
     })
 
@@ -91,31 +107,24 @@ Remember: respond with ONLY the JSON object. Nothing else.
     }
 
     const rawContent: string = data.content?.[0]?.text ?? ""
-
-    // Parse the generated JSON — strip any accidental markdown fences
-    const cleaned = rawContent
-      .replace(/^```(?:json)?\n?/m, "")
-      .replace(/\n?```$/m, "")
-      .trim()
+    const cleaned = rawContent.replace(/^```(?:json)?\n?/m, "").replace(/\n?```$/m, "").trim()
 
     let files: Record<string, string>
     try {
       files = JSON.parse(cleaned)
     } catch {
       console.error("[forge] JSON parse failed. Raw:", rawContent.slice(0, 500))
-      return NextResponse.json(
-        { error: "Claude returned malformed JSON. Try again." },
-        { status: 502 },
-      )
+      return NextResponse.json({ error: "Claude returned malformed JSON. Try again." }, { status: 502 })
     }
 
-    // Validate we got at least the essential files
     if (!files["package.json"] || !files["src/app/page.tsx"]) {
-      return NextResponse.json(
-        { error: "Generated app is missing required files. Try again." },
-        { status: 502 },
-      )
+      return NextResponse.json({ error: "Generated app is missing required files. Try again." }, { status: 502 })
     }
+
+    // Always override next.config — guarantee it's correct regardless of what Claude produced
+    files["next.config.js"] = `/** @type {import('next').NextConfig} */\nconst nextConfig = {\n  basePath: '/apps/${slug}',\n  trailingSlash: true,\n}\nmodule.exports = nextConfig\n`
+    delete files["next.config.ts"]
+    delete files["next.config.mjs"]
 
     return NextResponse.json({ slug, files })
   } catch (error) {
