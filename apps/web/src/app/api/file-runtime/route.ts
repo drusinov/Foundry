@@ -6,12 +6,12 @@ import { NextResponse } from "next/server"
 // Files whose full content is included in the runtime snapshot.
 // These are the most important files for understanding what Foundry does.
 const KEY_FILES = [
-  "apps/web/src/app/page.tsx",
-  "apps/web/src/app/api/ai/route.ts",
-  "apps/web/src/core/context/generate-ai-prompt.ts",
-  "apps/web/src/core/context/generate-compressed-context.ts",
-  "apps/web/src/core/state/interaction-store.tsx",
-  "apps/web/src/hooks/useAiRuntime.ts",
+  "src/app/page.tsx",
+  "src/app/api/ai/route.ts",
+  "src/core/context/generate-ai-prompt.ts",
+  "src/core/context/generate-compressed-context.ts",
+  "src/core/state/interaction-store.tsx",
+  "src/hooks/useAiRuntime.ts",
 ]
 
 const MAX_FILE_CHARS = 3000  // truncate large files
@@ -24,6 +24,8 @@ function walkSrc(dir: string, base: string): string[] {
   } catch {
     return results
   }
+  // skip broken symlinks
+  entries = entries.filter(e => { try { fs.statSync(path.join(dir, e.name)); return true } catch { return false } })
   for (const entry of entries) {
     if (entry.name.startsWith(".") || entry.name === "node_modules") continue
     const full = path.join(dir, entry.name)
@@ -39,8 +41,8 @@ function walkSrc(dir: string, base: string): string[] {
 
 export async function GET() {
   try {
-    const repoRoot = path.resolve(process.cwd(), "../../..")
-    const srcDir   = path.join(repoRoot, "apps/web/src")
+    const repoRoot = process.cwd()
+    const srcDir   = path.join(repoRoot, "src")
 
     // Full file tree of apps/web/src
     const fileTree = walkSrc(srcDir, repoRoot)
@@ -62,7 +64,7 @@ export async function GET() {
     // Recent git log
     let recentCommits: string[] = []
     try {
-      recentCommits = execSync("git log --oneline -10", { cwd: repoRoot })
+      recentCommits = execSync("git log --oneline -10", { cwd: path.resolve(repoRoot, "../..")})
         .toString().trim().split("\n")
     } catch {
       recentCommits = []
@@ -71,7 +73,7 @@ export async function GET() {
     // Package versions
     let packageJson: Record<string, unknown> = {}
     try {
-      const pkgPath = path.join(repoRoot, "apps/web/package.json")
+      const pkgPath = path.join(repoRoot, "package.json")
       packageJson = JSON.parse(fs.readFileSync(pkgPath, "utf8"))
     } catch {
       packageJson = {}
