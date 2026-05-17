@@ -1,220 +1,128 @@
-# Foundry — Project Handoff / Operational Context
+# Foundry — Project Handoff
 
-## Current Architecture State
-
-Frontend runtime architecture is now based on:
-
-* React Context interaction kernel
-* centralized interaction state
-* command-driven runtime flow
-* thread entry renderer abstraction
-* modular command registry/actions architecture
-
-Core runtime loop:
-
-Command Palette
-→ Command Action
-→ Interaction Store
-→ Thread Mutation
-→ Reactive Render
-
-This loop is now operational.
+> STATUS: CURRENT IMPLEMENTATION
+>
+> This document reflects the actual current operational state of Foundry.
+>
+> It intentionally separates:
+> - current reality
+> - target architecture
+> - long-term vision
+> - archived history
+>
+> See:
+> - docs/current/CURRENT_ARCHITECTURE.md
+> - docs/target/
+> - docs/vision/
+> - docs/rfc/
+>
+> for broader architectural context.
 
 ---
 
-# Stable Runtime State
+# Foundry Overview
 
-System currently boots successfully with:
+Foundry is evolving toward:
 
-* Next.js 16.2.6
-* Turbopack
-* React 19
-* clean hydration
-* clean compile
-* no runtime crashes
+AI-native operational runtime orchestration.
 
-Known non-blocking warning:
+Foundry is NOT:
+- generic AI workspace software
+- autonomous coding toy
+- chatbot wrapper
 
-DEP0205:
-module.register() deprecated
-Safe to ignore for now.
+Core philosophy:
 
----
+Foundry Core remains highly protected and operationally stable.
 
-# Architectural Decisions
-
-## Interaction State
-
-Old:
-
-* local scattered state
-* prop drilling
-* store-like naming
-
-New:
-
-* React Context provider
-* useInteraction hook
-* centralized interaction runtime
-
-File:
-apps/web/src/core/state/interaction-store.tsx
+Constructs/workspaces become isolated mutable runtimes managed by Foundry.
 
 ---
 
-## Thread Rendering
+# Current Runtime Status
 
-Thread entries were split into modular cards:
+Current operational state:
 
-* BriefEntryCard
-* ArtifactEntryCard
-* MemoryEntryCard
-* RunEntryCard
-* SystemEntryCard
-* ConvergenceEntryCard
+- VPS runtime operational
+- PM2 runtime operational
+- GitHub synchronization operational
+- OpenAI integration operational
+- Foundry UI operational
 
-Renderer:
-apps/web/src/core/thread/render-entry.tsx
-
-Current export:
-renderThreadEntry
-
-NOT renderEntry.
+Current platform state:
+FOUNDATIONAL RUNTIME STABLE.
 
 ---
 
-## Command Runtime
+# Runtime Stack
 
-Command runtime moved away from:
+## Frontend
+- Next.js 16
+- App Router
+- React
+- TypeScript
+- Tailwind
+- Turbopack
 
-* static execution helpers
-* direct exports
+## Monorepo
+- Turborepo
+- pnpm workspaces
 
-Now uses:
-
-* useCommandActions hook
-* interaction store mutation
-
-Obsolete:
-use-command-runtime.ts currently stubbed intentionally.
-
----
-
-# Important Naming Conventions
-
-Migrated:
-
-* useInteractionStore
-  → useInteraction
-
-* renderEntry
-  → renderThreadEntry
-
-* interaction-store.ts
-  → interaction-store.tsx
-
-Reason:
-JSX inside provider component.
+## Hosting
+- Ubuntu VPS
+- PM2-managed runtime
 
 ---
 
-# UI / Styling Rules
+# Current Runtime Flow
 
-* classNames should stay on ONE line
-* prefer full-file replacements instead of snippets
-* avoid partial nano editing when possible
-* preserve deterministic safe-state workflow
+Current deployment model:
 
----
+Local Development
+→ Git Commit
+→ GitHub Push
+→ VPS Pull
+→ PM2 Restart
 
-# Workflow Rules
-
-Critical operational rule:
-
-Always stabilize before expanding architecture.
-
-Flow:
-
-1. modify
-2. compile
-3. stabilize
-4. commit
-5. continue
-
-Never stack multiple unstable refactors simultaneously.
+Deployment is currently:
+- manual
+- human-controlled
+- GitHub-synchronized
 
 ---
 
-# Current Stable Milestones
+# Current File Tree
 
-Committed milestones include:
+```txt
+apps/
+  web/
+    src/
+      app/
+        api/
+          ai/
+          git-state/
+          file-runtime/
 
-* Implement interaction kernel and command runtime
-* Wire interaction runtime loop
-* Stabilize interaction runtime loop
+      components/
+        command/
+        layout/
+        system/
+        thread/
 
----
+      core/
+        registry/
+        state/
+        types/
+        utils/
 
-# Current Operational Features
+      hooks/
 
-Working:
+packages/
+  tokens/
 
-* command palette UI
-* command filtering
-* command execution
-* interaction store mutation
-* reactive thread updates
-* modular thread rendering
-
----
-
-# Immediate Next Target
-
-Phase 2 — Keyboard Runtime
-
-Implement:
-
-* CMD+K
-* ESC
-* Arrow navigation
-* Enter execution
-* selected command state
-
-Goal:
-make interaction kernel feel native and deterministic.
-
----
-
-# Explicit NON-Goals Right Now
-
-DO NOT focus on:
-
-* backend
-* auth
-* database
-* websocket infra
-* AI orchestration
-* persistence
-* animations polish
-
-Priority is:
-deterministic interaction kernel.
-
----
-
-# Operational Philosophy
-
-Project should evolve as:
-
-structured operating shell
-
-NOT:
-random React prototype.
-
-Every change should preserve:
-
-* rollback safety
-* runtime determinism
-* architectural clarity
-* modular extensibility
-
+docs/
+  current/
+  target/
+  vision/
+  archive/
+  rfc/
