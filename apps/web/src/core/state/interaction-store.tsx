@@ -1,7 +1,5 @@
 "use client"
 
-import { createRuntimeId } from "@/core/utils/create-runtime-id"
-
 import {
   createContext,
   useContext,
@@ -12,6 +10,8 @@ import {
 import type {
   OperationalEvent,
 } from "@/core/types/operational-event"
+
+import { createRuntimeId } from "@/core/utils/create-runtime-id"
 
 type SessionRuntime = {
   currentObjective: string
@@ -53,6 +53,19 @@ const InteractionContext =
     InteractionContextValue | undefined
   >(undefined)
 
+const INITIAL_EVENT: OperationalEvent =
+  {
+    id: "runtime-init",
+
+    type: "system_event",
+
+    content:
+      "Foundry operational runtime initialized.",
+
+    createdAt:
+      "2026-05-17T07:00:00.000Z",
+  }
+
 export function InteractionProvider({
   children,
 }: {
@@ -68,19 +81,7 @@ export function InteractionProvider({
     setOperationalEvents,
   ] = useState<
     OperationalEvent[]
-  >([
-    {
-      id: createRuntimeId(),
-
-      type: "system_event",
-
-      content:
-        "Foundry operational runtime initialized.",
-
-      createdAt:
-        new Date().toISOString(),
-    },
-  ])
+  >([INITIAL_EVENT])
 
   const [
     latestCheckpoint,
