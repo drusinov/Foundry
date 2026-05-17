@@ -4,54 +4,28 @@ import path from "node:path"
 
 import { NextResponse } from "next/server"
 
-function walkDirectory(
-  directory: string,
-  files: string[] = [],
-) {
-  const entries =
-    fs.readdirSync(directory, {
-      withFileTypes: true,
-    })
-
-  for (const entry of entries) {
-    const fullPath = path.join(
-      directory,
-      entry.name,
-    )
-
-    if (
-      fullPath.includes("node_modules") ||
-      fullPath.includes(".next") ||
-      fullPath.includes(".git")
-    ) {
-      continue
-    }
-
-    if (entry.isDirectory()) {
-      walkDirectory(
-        fullPath,
-        files,
-      )
-    } else {
-      files.push(fullPath)
-    }
-  }
-
-  return files
-}
-
 export async function GET() {
   try {
-    const projectRoot =
-      process.cwd()
+    const repoRoot = path.resolve(
+      process.cwd(),
+      "../../..",
+    )
+
+    const topLevelEntries =
+      fs.readdirSync(repoRoot, {
+        withFileTypes: true,
+      })
 
     const files =
-      walkDirectory(projectRoot).map(
-        (file) =>
-          path.relative(
-            projectRoot,
-            file,
-          ),
+      topLevelEntries.map(
+        (entry) => ({
+          name: entry.name,
+
+          type:
+            entry.isDirectory()
+              ? "directory"
+              : "file",
+        }),
       )
 
     return NextResponse.json({
@@ -60,10 +34,11 @@ export async function GET() {
       totalFiles:
         files.length,
 
-      recentFiles:
-        files
-          .slice(-10)
-          .reverse(),
+      recentFiles: files
+        .slice(0, 10)
+        .map(
+          (file) => file.name,
+        ),
     })
   } catch (error) {
     console.error(error)
