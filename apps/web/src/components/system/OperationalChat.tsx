@@ -4,54 +4,201 @@ import { createRuntimeId } from "@/core/utils/create-runtime-id"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useInteraction } from "@/core/state/interaction-store"
 import { useGitRuntime } from "@/hooks/useGitRuntime"
-import { useFileRuntime } from "@/hooks/useFileRuntime"
 import { useAiRuntime } from "@/hooks/useAiRuntime"
+import { useFileRuntime } from "@/hooks/useFileRuntime"
 import { generateRuntimeImpacts } from "@/core/runtime/runtime-impact-engine"
 import { generateCompressedContext } from "@/core/context/generate-compressed-context"
 import { generateAiPrompt } from "@/core/context/generate-ai-prompt"
 import type { OperationalEventType } from "@/core/types/operational-event"
+import type { AiUsage } from "@/hooks/useAiRuntime"
+
+// ── Markdown renderer ─────────────────────────────────────────────────────────
+
+function renderInline(text: string): React.ReactNode[] {
+  const parts = text.split(/(`[^`\n]+`|\*\*[^*]+\*\*|\*[^*\n]+\*)/g)
+  return parts.map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={i} style={{ color: "var(--text-1)", fontWeight: 600 }}>{part.slice(2, -2)}</strong>
+    }
+    if (part.startsWith("*") && part.endsWith("*") && part.length > 2) {
+      return <em key={i}>{part.slice(1, -1)}</em>
+    }
+    if (part.startsWith("`") && part.endsWith("`")) {
+      return (
+        <code key={i} style={{
+          fontFamily: "var(--font-mono)", fontSize: "12px",
+          background: "rgba(255,255,255,0.08)", borderRadius: "4px",
+          padding: "1px 5px", color: "var(--cyan)",
+        }}>
+          {part.slice(1, -1)}
+        </code>
+      )
+    }
+    return <span key={i}>{part}</span>
+  })
+}
+
+function CodeBlock({ lang, code }: { lang: string; code: string }) {
+  const [copied, setCopied] = useState(false)
+
+  function copy() {
+    navigator.clipboard.writeText(code)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+
+  return (
+    <div className="relative my-3 overflow-hidden rounded-xl" style={{ background: "rgba(0,0,0,0.45)", border: "1px solid rgba(255,255,255,0.08)" }}>
+      <div className="flex items-center justify-between px-4 py-2" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-4)", letterSpacing: "0.05em" }}>
+          {lang || "code"}
+        </span>
+        <button onClick={copy} style={{ fontSize: "11px", color: copied ? "var(--green)" : "var(--text-4)", cursor: "pointer" }}>
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
+      <pre className="overflow-x-auto px-4 py-3" style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: "12px", lineHeight: "1.6", color: "var(--text-1)" }}>
+        <code>{code.trimEnd()}</code>
+      </pre>
+    </div>
+  )
+}
+
+function MarkdownContent({ text }: { text: string }) {
+  // Split on fenced code blocks first
+  const segments = text.split(/(```[\w]*\n[\s\S]*?```)/g)
+
+  return (
+    <div className="space-y-1">
+      {segments.map((seg, si) => {
+        // Code block
+        const codeMatch = seg.match(/^```([\w]*)\n([\s\S]*?)```$/)
+        if (codeMatch) {
+          return <CodeBlock key={si} lang={codeMatch[1]} code={codeMatch[2]} />
+        }
+
+        // Text block — process line by line
+        const lines = seg.split("\n")
+        const nodes: React.ReactNode[] = []
+        let listItems: { text: string; ordered: boolean }[] = []
+        let listOrdered = false
+
+        function flushList() {
+          if (!listItems.length) return
+          const Tag = listOrdered ? "ol" : "ul"
+          nodes.push(
+            <Tag key={`list-${nodes.length}`} style={{ paddingLeft: "1.2em", margin: "6px 0", color: "var(--text-2)" }}>
+              {listItems.map((item, i) => (
+                <li key={i} style={{ fontSize: "13px", lineHeight: "1.7", marginBottom: "2px" }}>
+                  {renderInline(item.text)}
+                </li>
+              ))}
+            </Tag>
+          )
+          listItems = []
+        }
+
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i]
+
+          // Heading
+          const h = line.match(/^(#{1,3})\s+(.+)/)
+          if (h) {
+            flushList()
+            const sizes = { 1: "15px", 2: "14px", 3: "13px" }
+            const size = sizes[h[1].length as 1 | 2 | 3] ?? "13px"
+            nodes.push(
+              <div key={`h-${i}`} style={{ fontSize: size, fontWeight: 600, color: "var(--text-1)", marginTop: "12px", marginBottom: "4px" }}>
+                {renderInline(h[2])}
+              </div>
+            )
+            continue
+          }
+
+          // Horizontal rule
+          if (line.match(/^---+$/)) {
+            flushList()
+            nodes.push(<div key={`hr-${i}`} style={{ height: "1px", background: "var(--border-subtle)", margin: "10px 0" }} />)
+            continue
+          }
+
+          // Unordered list
+          const ul = line.match(/^[-*•]\s+(.+)/)
+          if (ul) {
+            if (listItems.length && listOrdered) flushList()
+            listOrdered = false
+            listItems.push({ text: ul[1], ordered: false })
+            continue
+          }
+
+          // Ordered list
+          const ol = line.match(/^\d+\.\s+(.+)/)
+          if (ol) {
+            if (listItems.length && !listOrdered) flushList()
+            listOrdered = true
+            listItems.push({ text: ol[1], ordered: true })
+            continue
+          }
+
+          // Empty line — paragraph break
+          if (!line.trim()) {
+            flushList()
+            continue
+          }
+
+          // Regular paragraph line
+          flushList()
+          nodes.push(
+            <div key={`p-${i}`} style={{ fontSize: "13px", lineHeight: "1.7", color: "var(--text-1)" }}>
+              {renderInline(line)}
+            </div>
+          )
+        }
+        flushList()
+
+        return <div key={si}>{nodes}</div>
+      })}
+    </div>
+  )
+}
+
+// ── Event coloring ────────────────────────────────────────────────────────────
 
 function eventColors(type: OperationalEventType) {
   switch (type) {
-    case "command":   return { bar: "var(--blue)",   label: "rgba(99,153,255,0.7)",  bg: "rgba(99,153,255,0.06)",  border: "rgba(99,153,255,0.14)" }
-    case "result":    return { bar: null,             label: "var(--text-3)",         bg: "var(--bg-raised)",       border: "var(--border-subtle)" }
-    case "error":     return { bar: "var(--red)",    label: "rgba(248,113,113,0.7)", bg: "rgba(248,113,113,0.06)", border: "rgba(248,113,113,0.14)" }
-    case "checkpoint":return { bar: "var(--green)",  label: "rgba(74,222,128,0.7)",  bg: "rgba(74,222,128,0.06)",  border: "rgba(74,222,128,0.14)" }
-    case "recovery":  return { bar: "var(--orange)", label: "rgba(251,146,60,0.7)",  bg: "rgba(251,146,60,0.06)",  border: "rgba(251,146,60,0.14)" }
-    default:          return { bar: null,             label: "var(--text-4)",         bg: "transparent",            border: "transparent" }
+    case "command":    return { bar: "var(--blue)",   label: "rgba(99,153,255,0.7)",  bg: "rgba(99,153,255,0.06)",  border: "rgba(99,153,255,0.14)" }
+    case "result":     return { bar: null,             label: "var(--text-3)",          bg: "var(--bg-raised)",        border: "var(--border-subtle)" }
+    case "error":      return { bar: "var(--red)",    label: "rgba(248,113,113,0.7)", bg: "rgba(248,113,113,0.06)", border: "rgba(248,113,113,0.14)" }
+    case "checkpoint": return { bar: "var(--green)",  label: "rgba(74,222,128,0.7)",  bg: "rgba(74,222,128,0.06)",  border: "rgba(74,222,128,0.14)" }
+    case "recovery":   return { bar: "var(--orange)", label: "rgba(251,146,60,0.7)",  bg: "rgba(251,146,60,0.06)",  border: "rgba(251,146,60,0.14)" }
+    default:           return { bar: null,             label: "var(--text-4)",          bg: "transparent",             border: "transparent" }
   }
 }
 
-// Pipeline badge shown on result events
-function PipelineBadge({ pipeline }: { pipeline?: string }) {
-  if (!pipeline || pipeline === "error") return null
-  const label = pipeline === "openai→claude" ? "GPT → Claude"
-    : pipeline === "claude"  ? "Claude"
-    : pipeline === "openai"  ? "GPT-4.1-mini"
-    : null
-  if (!label) return null
+// ── Token badge ───────────────────────────────────────────────────────────────
+
+function TokenBadge({ usage }: { usage?: AiUsage }) {
+  if (!usage || (usage.inputTokens === 0 && usage.outputTokens === 0)) return null
+  const fmt = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
   return (
-    <span
-      className="ml-2 rounded px-1.5 py-0.5"
-      style={{
-        fontFamily: "var(--font-mono)",
-        fontSize: "9px",
-        letterSpacing: "0.06em",
-        background: "rgba(167,139,250,0.1)",
-        border: "1px solid rgba(167,139,250,0.2)",
-        color: "var(--forge)",
-      }}
-    >
-      {label}
+    <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-4)" }}>
+      ↑{fmt(usage.inputTokens)} ↓{fmt(usage.outputTokens)}
     </span>
   )
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
+type ExtendedEvent = {
+  id: string; type: OperationalEventType; content: string; createdAt: string;
+  pipeline?: string; usage?: AiUsage
 }
 
 export function OperationalChat() {
   const { latestCheckpoint, operationalEvents, appendOperationalEvent } = useInteraction()
   const gitRuntime    = useGitRuntime()
+  const fileRuntime   = useFileRuntime()
   const { loading, executePrompt } = useAiRuntime()
-  const fileRuntime = useFileRuntime()
   const bottomRef     = useRef<HTMLDivElement | null>(null)
 
   const [openaiKey,    setOpenaiKey]    = useState("")
@@ -60,7 +207,9 @@ export function OperationalChat() {
   const [input,        setInput]        = useState("")
   const [builtPrompt,  setBuiltPrompt]  = useState("")
 
-  // Load saved keys after mount — prevents SSR/client hydration mismatch
+  // Session token totals
+  const [sessionTokens, setSessionTokens] = useState({ input: 0, output: 0 })
+
   useEffect(() => {
     const oa = localStorage.getItem("foundry-openai-key")
     const an = localStorage.getItem("foundry-anthropic-key")
@@ -68,73 +217,56 @@ export function OperationalChat() {
     if (an) setAnthropicKey(an)
   }, [])
 
-  function saveOpenaiKey(v: string) {
-    setOpenaiKey(v)
-    localStorage.setItem("foundry-openai-key", v)
-  }
-
-  function saveAnthropicKey(v: string) {
-    setAnthropicKey(v)
-    localStorage.setItem("foundry-anthropic-key", v)
-  }
+  function saveOpenaiKey(v: string)    { setOpenaiKey(v);    localStorage.setItem("foundry-openai-key",    v) }
+  function saveAnthropicKey(v: string) { setAnthropicKey(v); localStorage.setItem("foundry-anthropic-key", v) }
 
   const impacts = useMemo(() =>
-    gitRuntime ? generateRuntimeImpacts(gitRuntime.diffEntries) : [],
-    [gitRuntime]
-  )
+    gitRuntime ? generateRuntimeImpacts(gitRuntime.diffEntries) : [], [gitRuntime])
 
   const context = useMemo(() =>
     generateCompressedContext({
-      gitRuntime,
-      runtimeImpacts: impacts,
-      latestCheckpoint,
-      fileRuntime,
+      gitRuntime, runtimeImpacts: impacts, latestCheckpoint, fileRuntime,
       operationalMessages: operationalEvents.map((e) => ({
         id: e.id, role: e.type === "command" ? "user" : "system",
         content: e.content, createdAt: e.createdAt,
       })),
     }),
-    [gitRuntime, impacts, latestCheckpoint, operationalEvents]
+    [gitRuntime, fileRuntime, impacts, latestCheckpoint, operationalEvents]
   )
+
+  const events = operationalEvents as unknown as ExtendedEvent[]
 
   async function send() {
     if (!input.trim()) return
 
-    appendOperationalEvent({
-      id: createRuntimeId(), type: "command",
-      content: input, createdAt: new Date().toISOString(),
-    })
-
+    appendOperationalEvent({ id: createRuntimeId(), type: "command", content: input, createdAt: new Date().toISOString() })
     const built = generateAiPrompt({ continuity: context, userMessage: input })
     setBuiltPrompt(built)
     setInput("")
-
     requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }))
 
     if (!openaiKey.trim() && !anthropicKey.trim()) {
-      appendOperationalEvent({
-        id: createRuntimeId(), type: "error",
-        content: "No API key set. Add an OpenAI key, an Anthropic key, or both.",
-        createdAt: new Date().toISOString(),
-      })
+      appendOperationalEvent({ id: createRuntimeId(), type: "error", content: "No API key set.", createdAt: new Date().toISOString() })
       return
     }
 
-    const result = await executePrompt(
-      { openaiKey: openaiKey.trim(), anthropicKey: anthropicKey.trim() },
-      built,
-    )
+    const result = await executePrompt({ openaiKey: openaiKey.trim(), anthropicKey: anthropicKey.trim() }, built)
 
-    // Store pipeline info in event metadata via content prefix for display
-    appendOperationalEvent({
-      id: createRuntimeId(),
-      type: result?.pipeline === "error" ? "error" : "result",
-      content: result?.content ?? "Request failed.",
+    // Accumulate session tokens
+    setSessionTokens(prev => ({
+      input:  prev.input  + result.usage.inputTokens,
+      output: prev.output + result.usage.outputTokens,
+    }))
+
+    const ev = {
+      id:        createRuntimeId(),
+      type:      (result.pipeline === "error" ? "error" : "result") as OperationalEventType,
+      content:   result.content,
       createdAt: new Date().toISOString(),
-      // @ts-expect-error — extend event with pipeline for display
-      pipeline: result?.pipeline,
-    })
-
+      pipeline:  result.pipeline,
+      usage:     result.usage,
+    }
+    appendOperationalEvent(ev)
     requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }))
   }
 
@@ -142,20 +274,19 @@ export function OperationalChat() {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); await send() }
   }
 
-  // Determine active pipeline label for the hint
   const pipelineHint = openaiKey && anthropicKey ? "GPT-4.1-mini → Claude"
-    : anthropicKey ? "Claude"
-    : openaiKey    ? "GPT-4.1-mini"
-    : "no key set"
+    : anthropicKey ? "Claude" : openaiKey ? "GPT-4.1-mini" : "no key set"
+
+  const fmtTokens = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
 
   return (
     <div className="flex h-full flex-col">
 
-      {/* ── Stream ── */}
+      {/* ── Event stream ── */}
       <div className="flex-1 overflow-y-auto px-4 py-4">
         <div className="mx-auto max-w-2xl space-y-2">
 
-          {operationalEvents.map((ev) => {
+          {events.map((ev) => {
             const c = eventColors(ev.type)
             if (ev.type === "system_event") return (
               <div key={ev.id} className="fade-up flex items-center gap-3 py-1">
@@ -168,29 +299,43 @@ export function OperationalChat() {
             )
 
             return (
-              <div
-                key={ev.id}
-                className="fade-up flex gap-3 rounded-xl p-3.5"
-                style={{ background: c.bg, border: `1px solid ${c.border}` }}
-              >
-                {c.bar && (
-                  <div className="mt-0.5 w-0.5 shrink-0 self-stretch rounded-full" style={{ background: c.bar }} />
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="mb-1.5 flex items-center justify-between gap-2">
-                    <div className="flex items-center">
+              <div key={ev.id} className="fade-up group relative rounded-xl p-3.5" style={{ background: c.bg, border: `1px solid ${c.border}` }}>
+                {/* Copy button — appears on hover */}
+                <button
+                  onClick={() => navigator.clipboard.writeText(ev.content)}
+                  className="absolute right-2.5 top-2.5 opacity-0 group-hover:opacity-100 rounded-md px-2 py-1 transition-opacity"
+                  style={{ fontSize: "10px", color: "var(--text-4)", background: "var(--bg-overlay)", border: "1px solid var(--border-subtle)" }}
+                >
+                  Copy
+                </button>
+
+                <div className="flex gap-3">
+                  {c.bar && <div className="mt-0.5 w-0.5 shrink-0 self-stretch rounded-full" style={{ background: c.bar }} />}
+                  <div className="min-w-0 flex-1">
+                    {/* Meta row */}
+                    <div className="mb-2 flex items-center gap-2 flex-wrap">
                       <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase", color: c.label }}>
                         {ev.type.replace(/_/g, " ")}
                       </span>
-                      {/* @ts-expect-error pipeline is injected at runtime */}
-                      {ev.type === "result" && <PipelineBadge pipeline={ev.pipeline} />}
+                      {ev.pipeline && ev.pipeline !== "error" && (
+                        <span className="rounded px-1.5 py-0.5" style={{ fontFamily: "var(--font-mono)", fontSize: "9px", background: "rgba(167,139,250,0.1)", border: "1px solid rgba(167,139,250,0.18)", color: "var(--forge)" }}>
+                          {ev.pipeline === "openai→claude" ? "GPT → Claude" : ev.pipeline === "claude" ? "Claude" : "GPT"}
+                        </span>
+                      )}
+                      <TokenBadge usage={ev.usage} />
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-4)", marginLeft: "auto" }}>
+                        {ev.createdAt.slice(11, 19)}
+                      </span>
                     </div>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-4)" }}>
-                      {ev.createdAt.slice(11, 19)}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: "13px", lineHeight: "1.6", color: "var(--text-1)", whiteSpace: "pre-wrap" }}>
-                    {ev.content}
+
+                    {/* Content — markdown for result events, plain for others */}
+                    {ev.type === "result" ? (
+                      <MarkdownContent text={ev.content} />
+                    ) : (
+                      <div style={{ fontSize: "13px", lineHeight: "1.6", color: "var(--text-1)", whiteSpace: "pre-wrap" }}>
+                        {ev.content}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -209,7 +354,6 @@ export function OperationalChat() {
               </span>
             </div>
           )}
-
           <div ref={bottomRef} />
         </div>
       </div>
@@ -217,8 +361,6 @@ export function OperationalChat() {
       {/* ── Input zone ── */}
       <div className="shrink-0 px-4 pb-4">
         <div className="mx-auto max-w-2xl">
-
-          {/* Main input card */}
           <div className="rounded-2xl" style={{ background: "var(--bg-overlay)", border: "1px solid var(--border)" }}>
             <textarea
               value={input}
@@ -230,12 +372,9 @@ export function OperationalChat() {
               style={{ fontSize: "14px", lineHeight: "1.6", fontFamily: "var(--font-ui)" }}
             />
 
-            {/* Bottom bar */}
             <div className="border-t px-3 py-2.5" style={{ borderColor: "var(--border-subtle)" }}>
-
               {/* Keys row */}
               <div className="mb-2.5 flex items-center gap-3">
-                {/* OpenAI key */}
                 <div className="flex flex-1 items-center gap-2">
                   <div className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: openaiKey ? "var(--green)" : "var(--border-strong)" }} />
                   <input
@@ -247,10 +386,7 @@ export function OperationalChat() {
                     style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-3)" }}
                   />
                 </div>
-
                 <div className="h-3 w-px shrink-0" style={{ background: "var(--border)" }} />
-
-                {/* Anthropic key */}
                 <div className="flex flex-1 items-center gap-2">
                   <div className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: anthropicKey ? "var(--forge)" : "var(--border-strong)" }} />
                   <input
@@ -262,57 +398,52 @@ export function OperationalChat() {
                     style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-3)" }}
                   />
                 </div>
-
-                <button
-                  onClick={() => setShowKeys(v => !v)}
-                  style={{ fontSize: "10px", color: "var(--text-4)", textTransform: "uppercase", letterSpacing: "0.06em", flexShrink: 0 }}
-                >
+                <button onClick={() => setShowKeys(v => !v)} style={{ fontSize: "10px", color: "var(--text-4)", textTransform: "uppercase", letterSpacing: "0.06em", flexShrink: 0 }}>
                   {showKeys ? "hide" : "show"}
                 </button>
               </div>
 
               {/* Actions row */}
               <div className="flex items-center justify-between">
-                {/* Pipeline indicator */}
-                <div className="flex items-center gap-1.5">
-                  <span style={{ fontSize: "10px", color: "var(--text-4)" }}>pipeline:</span>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: openaiKey && anthropicKey ? "var(--forge)" : "var(--text-3)" }}>
-                    {pipelineHint}
-                  </span>
+                {/* Pipeline + session tokens */}
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <span style={{ fontSize: "10px", color: "var(--text-4)" }}>pipeline:</span>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: openaiKey && anthropicKey ? "var(--forge)" : "var(--text-3)" }}>
+                      {pipelineHint}
+                    </span>
+                  </div>
+                  {(sessionTokens.input > 0 || sessionTokens.output > 0) && (
+                    <div className="flex items-center gap-1" style={{ color: "var(--text-4)" }}>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px" }}>
+                        session ↑{fmtTokens(sessionTokens.input)} ↓{fmtTokens(sessionTokens.output)}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2">
                   {builtPrompt && (
-                    <button
-                      onClick={() => navigator.clipboard.writeText(builtPrompt)}
-                      className="rounded-lg px-3 py-1.5"
-                      style={{ background: "var(--bg-hover)", border: "1px solid var(--border-subtle)", fontSize: "12px", color: "var(--text-3)" }}
-                    >
+                    <button onClick={() => navigator.clipboard.writeText(builtPrompt)} className="rounded-lg px-3 py-1.5"
+                      style={{ background: "var(--bg-hover)", border: "1px solid var(--border-subtle)", fontSize: "12px", color: "var(--text-3)" }}>
                       Copy prompt
                     </button>
                   )}
-                  <button
-                    onClick={send}
-                    disabled={loading || !input.trim()}
-                    className="rounded-lg px-4 py-1.5 font-medium"
+                  <button onClick={send} disabled={loading || !input.trim()} className="rounded-lg px-4 py-1.5 font-medium"
                     style={{
                       background: loading || !input.trim() ? "transparent" : "rgba(99,153,255,0.15)",
                       border: `1px solid ${loading || !input.trim() ? "var(--border-subtle)" : "rgba(99,153,255,0.3)"}`,
                       fontSize: "13px",
                       color: loading || !input.trim() ? "var(--text-4)" : "var(--blue)",
                       cursor: loading || !input.trim() ? "not-allowed" : "pointer",
-                    }}
-                  >
+                    }}>
                     {loading ? "Running…" : "Execute"}
                   </button>
                 </div>
               </div>
             </div>
           </div>
-
-          <div className="mt-1.5 px-1 text-right" style={{ fontSize: "10px", color: "var(--text-4)" }}>
-            ⌘↵ to execute
-          </div>
+          <div className="mt-1.5 px-1 text-right" style={{ fontSize: "10px", color: "var(--text-4)" }}>⌘↵ to execute</div>
         </div>
       </div>
     </div>

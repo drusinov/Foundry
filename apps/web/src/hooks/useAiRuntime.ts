@@ -1,23 +1,27 @@
 import { useState } from "react"
 
+export type AiUsage = { inputTokens: number; outputTokens: number }
+
+export type AiResult = {
+  content:  string
+  pipeline: string
+  usage:    AiUsage
+}
+
 export function useAiRuntime() {
   const [loading, setLoading] = useState(false)
 
   async function executePrompt(
     keys: { openaiKey: string; anthropicKey: string },
     prompt: string,
-  ): Promise<{ content: string; pipeline: string } | null> {
+  ): Promise<AiResult> {
     setLoading(true)
 
     try {
       const response = await fetch("/api/ai", {
-        method: "POST",
+        method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          openaiKey:    keys.openaiKey,
-          anthropicKey: keys.anthropicKey,
-          prompt,
-        }),
+        body: JSON.stringify({ openaiKey: keys.openaiKey, anthropicKey: keys.anthropicKey, prompt }),
       })
 
       const text = await response.text()
@@ -26,10 +30,10 @@ export function useAiRuntime() {
       try {
         data = JSON.parse(text)
       } catch {
-        console.error("[useAiRuntime] Non-JSON response:", text.slice(0, 200))
         return {
           content:  "Server returned an unexpected response. This usually means a timeout. Try again.",
           pipeline: "error",
+          usage:    { inputTokens: 0, outputTokens: 0 },
         }
       }
 
@@ -37,18 +41,24 @@ export function useAiRuntime() {
         return {
           content:  typeof data.error === "string" ? `Error: ${data.error}` : "Request failed.",
           pipeline: "error",
+          usage:    { inputTokens: 0, outputTokens: 0 },
         }
       }
 
       return {
         content:  typeof data.content  === "string" ? data.content  : "Empty response.",
         pipeline: typeof data.pipeline === "string" ? data.pipeline : "unknown",
+        usage: {
+          inputTokens:  typeof (data.usage as AiUsage)?.inputTokens  === "number" ? (data.usage as AiUsage).inputTokens  : 0,
+          outputTokens: typeof (data.usage as AiUsage)?.outputTokens === "number" ? (data.usage as AiUsage).outputTokens : 0,
+        },
       }
     } catch (err) {
       console.error("[useAiRuntime]", err)
       return {
         content:  "Network error — could not reach the AI runtime.",
         pipeline: "error",
+        usage:    { inputTokens: 0, outputTokens: 0 },
       }
     } finally {
       setLoading(false)
