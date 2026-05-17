@@ -1,5 +1,7 @@
 "use client"
 
+import { createRuntimeId } from "@/core/utils/create-runtime-id"
+
 import {
   createContext,
   useContext,
@@ -68,7 +70,7 @@ export function InteractionProvider({
     OperationalEvent[]
   >([
     {
-      id: crypto.randomUUID(),
+      id: createRuntimeId(),
 
       type: "system_event",
 

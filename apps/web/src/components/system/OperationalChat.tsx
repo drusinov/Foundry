@@ -1,5 +1,7 @@
 "use client"
 
+import { createRuntimeId } from "@/core/utils/create-runtime-id"
+
 import {
   useMemo,
   useRef,
@@ -104,7 +106,7 @@ export function OperationalChat() {
     }
 
     appendOperationalEvent({
-      id: crypto.randomUUID(),
+      id: createRuntimeId(),
 
       type: "command",
 
@@ -136,7 +138,7 @@ export function OperationalChat() {
 
     if (!apiKey.trim()) {
       appendOperationalEvent({
-        id: crypto.randomUUID(),
+        id: createRuntimeId(),
 
         type: "error",
 
@@ -157,7 +159,7 @@ export function OperationalChat() {
       )
 
     appendOperationalEvent({
-      id: crypto.randomUUID(),
+      id: createRuntimeId(),
 
       type:
         aiResponse
