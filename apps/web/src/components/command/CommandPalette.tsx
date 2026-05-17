@@ -14,38 +14,46 @@ type Props = {
 export function CommandPalette({
   open,
 }: Props) {
-  const [query, setQuery] = useState("")
+  const [query, setQuery] =
+    useState("")
 
-  const {
+  const [
     selectedCommandIndex,
     setSelectedCommandIndex,
-    resetSelectedCommandIndex,
-  } = useInteraction()
+  ] = useState(0)
 
   const { executeCommand } =
     useCommandActions()
 
-  const filteredCommands = useMemo(() => {
-    return commandRegistry.filter((command) =>
-      command.label
-        .toLowerCase()
-        .includes(query.toLowerCase()),
-    )
-  }, [query])
+  const filteredCommands =
+    useMemo(() => {
+      return commandRegistry.filter(
+        (command) =>
+          command.label
+            .toLowerCase()
+            .includes(
+              query.toLowerCase(),
+            ),
+      )
+    }, [query])
 
   if (!open) {
     return null
   }
 
   return (
-    <div className="absolute inset-0 flex items-start justify-center bg-black/40 backdrop-blur-sm">
+    <div className="absolute inset-0 z-50 flex items-start justify-center bg-black/40 backdrop-blur-sm">
       <div className="mt-32 w-full max-w-3xl overflow-hidden rounded-2xl border border-white/10 bg-[#11131A] shadow-2xl">
         <input
           value={query}
           onChange={(event) => {
-            setQuery(event.target.value)
+            setQuery(
+              event.target.value,
+            )
 
-            resetSelectedCommandIndex()
+            setSelectedCommandIndex(
+              0,
+            )
           }}
           placeholder="Search commands..."
           className="w-full border-b border-white/10 bg-transparent px-6 py-5 text-sm text-white outline-none"
@@ -62,7 +70,9 @@ export function CommandPalette({
                   )
                 }
                 onClick={() =>
-                  executeCommand(command)
+                  executeCommand(
+                    command,
+                  )
                 }
                 className={`flex w-full items-center justify-between border-b border-white/5 px-6 py-4 text-left transition ${
                   selectedCommandIndex ===
@@ -73,11 +83,15 @@ export function CommandPalette({
               >
                 <div>
                   <div className="text-sm font-medium text-white">
-                    {command.label}
+                    {
+                      command.label
+                    }
                   </div>
 
                   <div className="mt-1 text-xs text-zinc-400">
-                    {command.description}
+                    {
+                      command.description
+                    }
                   </div>
                 </div>
 
