@@ -2,8 +2,6 @@
 
 import { useMemo, useState } from "react"
 
-import { useInteraction } from "@/core/state/interaction-store"
-
 import { commandRegistry } from "@/core/registry/command-registry"
 import { useCommandActions } from "@/core/registry/command-actions"
 
@@ -81,22 +79,16 @@ export function CommandPalette({
                     : "hover:bg-white/5"
                 }`}
               >
-                <div>
-                  <div className="text-sm font-medium text-white">
-                    {
-                      command.label
-                    }
-                  </div>
-
-                  <div className="mt-1 text-xs text-zinc-400">
-                    {
-                      command.description
-                    }
-                  </div>
+                <div className="text-sm font-medium text-white">
+                  {
+                    command.label
+                  }
                 </div>
 
                 <div className="text-xs text-zinc-500">
-                  {command.group}
+                  {command.shortcut.join(
+                    " + ",
+                  )}
                 </div>
               </button>
             ),
