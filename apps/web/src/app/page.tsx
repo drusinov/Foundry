@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { AppShell } from "@/components/layout/AppShell"
 import { CommandPalette } from "@/components/command/CommandPalette"
 import { OperationalChat } from "@/components/system/OperationalChat"
@@ -9,48 +9,144 @@ import { StatusRail } from "@/components/system/StatusRail"
 import { useCommandRuntime } from "@/core/registry/use-command-runtime"
 import { InteractionProvider, useInteraction } from "@/core/state/interaction-store"
 import { useCommandPaletteKeyboard } from "@/hooks/useCommandPaletteKeyboard"
-import { useCommandActions } from "@/core/registry/command-actions"
-import { commandRegistry } from "@/core/registry/command-registry"
 
 type Tab = "runtime" | "forge" | "apps"
 
-/* ── Forge tab ── */
+// ── Types ────────────────────────────────────────────────────────────────────
+
+type ForgeStatus =
+  | "idle"
+  | "generating"
+  | "generated"
+  | "deploying"
+  | "live"
+  | "error"
+
+type ForgedApp = {
+  id: string
+  name: string
+  slug: string
+  description: string
+  status: "deploying" | "running" | "stopped" | "error"
+  port: number
+  url: string
+  pm2Name: string
+  createdAt: string
+}
+
+// ── Forge Tab ────────────────────────────────────────────────────────────────
+
 function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
-  const [idea, setIdea] = useState("")
+  const [idea, setIdea]               = useState("")
+  const [forgeStatus, setForgeStatus] = useState<ForgeStatus>("idle")
+  const [slug, setSlug]               = useState("")
+  const [files, setFiles]             = useState<Record<string, string>>({})
+  const [liveUrl, setLiveUrl]         = useState("")
+  const [errorMsg, setErrorMsg]       = useState("")
+  const [deployStep, setDeployStep]   = useState("")
+  const [anthropicKey, setAnthropicKey] = useState("")
+
+  useEffect(() => {
+    const k = localStorage.getItem("foundry-anthropic-key")
+    if (k) setAnthropicKey(k)
+  }, [])
 
   const templates = [
-    "Dashboard", "Data Explorer", "API Wrapper",
-    "Form Builder", "Doc Generator", "Analytics View",
+    "Dashboard with charts",
+    "Markdown notes app",
+    "Pomodoro timer",
+    "URL shortener",
+    "Personal kanban board",
+    "JSON formatter tool",
   ]
 
-  return (
-    // overflow-y-auto + no justify-center = scrollable when content overflows
+  async function forgeApp() {
+    if (!idea.trim()) return
+    if (!anthropicKey) {
+      setErrorMsg("Anthropic key not set — add it in the Runtime tab first.")
+      setForgeStatus("error")
+      return
+    }
+
+    setForgeStatus("generating")
+    setErrorMsg("")
+
+    try {
+      // Stage 1: Generate app code with Claude
+      const genRes = await fetch("/api/forge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: idea, anthropicKey }),
+      })
+
+      const genData = await genRes.json()
+
+      if (!genRes.ok || genData.error) {
+        setErrorMsg(genData.error ?? "Generation failed")
+        setForgeStatus("error")
+        return
+      }
+
+      setSlug(genData.slug)
+      setFiles(genData.files)
+      setForgeStatus("generated")
+    } catch (err) {
+      setErrorMsg(String(err))
+      setForgeStatus("error")
+    }
+  }
+
+  async function deployApp() {
+    setForgeStatus("deploying")
+    setDeployStep("Writing files…")
+
+    try {
+      const deployRes = await fetch("/api/forge/deploy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug, description: idea, files }),
+      })
+
+      const deployData = await deployRes.json()
+
+      if (!deployRes.ok || deployData.error) {
+        setErrorMsg(deployData.error ?? "Deployment failed")
+        setForgeStatus("error")
+        return
+      }
+
+      setLiveUrl(deployData.url)
+      setForgeStatus("live")
+    } catch (err) {
+      setErrorMsg(String(err))
+      setForgeStatus("error")
+    }
+  }
+
+  function reset() {
+    setForgeStatus("idle")
+    setIdea("")
+    setSlug("")
+    setFiles({})
+    setLiveUrl("")
+    setErrorMsg("")
+    setDeployStep("")
+  }
+
+  // ── Idle state ──
+  if (forgeStatus === "idle") return (
     <div className="h-full overflow-y-auto">
       <div className="forge-canvas min-h-full flex flex-col items-center justify-start px-6 py-12">
         <div className="w-full max-w-xl">
-
-          {/* Header */}
           <div className="mb-8 text-center">
-            <div
-              className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-2xl text-lg"
-              style={{ background: "rgba(167,139,250,0.15)", border: "1px solid rgba(167,139,250,0.25)" }}
-            >
-              ⚡
-            </div>
-            <h1 className="mt-3 text-xl font-semibold" style={{ color: "var(--text-1)" }}>
-              Forge
-            </h1>
+            <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-2xl text-lg" style={{ background: "rgba(167,139,250,0.15)", border: "1px solid rgba(167,139,250,0.25)" }}>⚡</div>
+            <h1 className="mt-3 text-xl font-semibold" style={{ color: "var(--text-1)" }}>Forge</h1>
             <p className="mt-1.5" style={{ fontSize: "13px", color: "var(--text-3)", lineHeight: "1.6" }}>
-              Describe an app. Foundry builds it, deploys it to your VPS,<br />
-              git-versions it, and manages it — automatically.
+              Describe an app. Foundry builds it, deploys it to your VPS, and manages it.
             </p>
           </div>
 
-          {/* Build input */}
-          <div
-            className="overflow-hidden rounded-2xl"
-            style={{ background: "var(--bg-overlay)", border: "1px solid var(--border)" }}
-          >
+          <div className="overflow-hidden rounded-2xl" style={{ background: "var(--bg-overlay)", border: "1px solid var(--border)" }}>
             <textarea
               value={idea}
               onChange={(e) => setIdea(e.target.value)}
@@ -59,14 +155,12 @@ function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
               className="w-full resize-none bg-transparent px-4 pt-4 pb-2 outline-none"
               style={{ fontSize: "14px", lineHeight: "1.6", fontFamily: "var(--font-ui)" }}
             />
-            <div
-              className="flex items-center justify-between border-t px-4 py-3"
-              style={{ borderColor: "var(--border-subtle)" }}
-            >
+            <div className="flex items-center justify-between border-t px-4 py-3" style={{ borderColor: "var(--border-subtle)" }}>
               <span style={{ fontSize: "12px", color: "var(--text-4)" }}>
                 Output: git repo + VPS deployment + entry in Apps
               </span>
               <button
+                onClick={forgeApp}
                 disabled={!idea.trim()}
                 className="rounded-lg px-4 py-1.5 text-[13px] font-medium"
                 style={{
@@ -81,28 +175,17 @@ function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
             </div>
           </div>
 
-          {/* Templates */}
           <div className="mt-6">
-            <p style={{ fontSize: "11px", letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-4)", marginBottom: "10px" }}>
-              Quickstart
-            </p>
+            <p style={{ fontSize: "11px", letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-4)", marginBottom: "10px" }}>Quickstart</p>
             <div className="flex flex-wrap gap-2">
               {templates.map((t) => (
                 <button
                   key={t}
-                  onClick={() => setIdea(`Build a ${t.toLowerCase()} app`)}
+                  onClick={() => setIdea(t)}
                   className="rounded-lg px-3 py-1.5 text-[12px]"
                   style={{ background: "var(--bg-raised)", border: "1px solid var(--border)", color: "var(--text-2)" }}
-                  onMouseEnter={(e) => {
-                    const el = e.currentTarget as HTMLElement
-                    el.style.borderColor = "rgba(167,139,250,0.3)"
-                    el.style.color = "var(--forge)"
-                  }}
-                  onMouseLeave={(e) => {
-                    const el = e.currentTarget as HTMLElement
-                    el.style.borderColor = "var(--border)"
-                    el.style.color = "var(--text-2)"
-                  }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--forge)"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(167,139,250,0.3)" }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--text-2)"; (e.currentTarget as HTMLElement).style.borderColor = "var(--border)" }}
                 >
                   {t}
                 </button>
@@ -110,100 +193,269 @@ function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
             </div>
           </div>
 
-          {/* How it works */}
-          <div
-            className="mt-8 rounded-2xl p-4"
-            style={{ background: "var(--bg-raised)", border: "1px solid var(--border-subtle)" }}
-          >
-            <p style={{ fontSize: "11px", letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-4)", marginBottom: "10px" }}>
-              How Forge works
-            </p>
-            {[
-              ["⚡", "Describe", "Tell Forge what you want. It generates the full codebase."],
-              ["↗", "Deploy",   "Foundry pushes to a new git repo and deploys to your VPS automatically."],
-              ["□", "Manage",   "The app appears in your Apps tab. Update or retire it from there."],
-              ["◉", "Isolate",  "Each forged app is sandboxed — separate from Foundry Core."],
-            ].map(([sym, label, desc]) => (
-              <div key={label} className="flex items-start gap-3 py-2">
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--forge)", marginTop: "1px", width: "20px", flexShrink: 0 }}>{sym}</span>
-                <div>
-                  <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--text-2)" }}>{label} — </span>
-                  <span style={{ fontSize: "12px", color: "var(--text-3)" }}>{desc}</span>
-                </div>
+          <button onClick={onOpenApps} className="mt-8 flex w-full items-center justify-between rounded-xl px-4 py-3" style={{ background: "var(--bg-raised)", border: "1px solid var(--border-subtle)" }}>
+            <span style={{ fontSize: "13px", color: "var(--text-3)" }}>View forged apps</span>
+            <span style={{ fontSize: "12px", color: "var(--text-4)" }}>Apps →</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+
+  // ── Generating state ──
+  if (forgeStatus === "generating") return (
+    <div className="flex h-full flex-col items-center justify-center gap-6">
+      <div className="flex gap-1.5">
+        {[0,1,2].map(i => (
+          <div key={i} className="h-2 w-2 rounded-full" style={{ background: "var(--forge)", animation: `pulse-dot 1.2s ease ${i*0.2}s infinite` }} />
+        ))}
+      </div>
+      <div className="text-center">
+        <p style={{ fontSize: "15px", fontWeight: 500, color: "var(--text-1)" }}>Claude is building your app</p>
+        <p style={{ fontSize: "12px", color: "var(--text-3)", marginTop: "6px" }}>Generating complete codebase from your description…</p>
+      </div>
+      <div className="rounded-xl px-4 py-2.5" style={{ background: "rgba(167,139,250,0.08)", border: "1px solid rgba(167,139,250,0.15)" }}>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--forge)" }}>{idea}</span>
+      </div>
+    </div>
+  )
+
+  // ── Generated state — show file tree + deploy button ──
+  if (forgeStatus === "generated") return (
+    <div className="h-full overflow-y-auto px-6 py-8">
+      <div className="mx-auto max-w-2xl">
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h2 style={{ fontSize: "15px", fontWeight: 600, color: "var(--text-1)" }}>App generated</h2>
+            <p style={{ fontSize: "12px", color: "var(--text-3)", marginTop: "2px" }}>{Object.keys(files).length} files · ready to deploy</p>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={reset} className="rounded-lg px-3 py-1.5 text-[12px]" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)", color: "var(--text-3)" }}>
+              Start over
+            </button>
+            <button
+              onClick={deployApp}
+              className="rounded-lg px-4 py-1.5 text-[13px] font-medium"
+              style={{ background: "rgba(74,222,128,0.12)", border: "1px solid rgba(74,222,128,0.25)", color: "var(--green)" }}
+            >
+              Deploy →
+            </button>
+          </div>
+        </div>
+
+        {/* Slug */}
+        <div className="mb-4 rounded-xl px-4 py-3" style={{ background: "var(--bg-raised)", border: "1px solid var(--border-subtle)" }}>
+          <div style={{ fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-4)", marginBottom: "4px" }}>Deployment URL</div>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--cyan)" }}>
+            https://drusinov.eu/apps/{slug}/
+          </div>
+        </div>
+
+        {/* File tree */}
+        <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border-subtle)" }}>
+          <div className="px-4 py-2.5" style={{ background: "rgba(255,255,255,0.03)", borderBottom: "1px solid var(--border-subtle)" }}>
+            <span style={{ fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-4)" }}>Generated files</span>
+          </div>
+          <div className="p-2" style={{ background: "var(--bg-raised)" }}>
+            {Object.keys(files).sort().map((filePath) => (
+              <div key={filePath} className="flex items-center gap-2 rounded-lg px-2 py-1.5">
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-4)" }}>
+                  {filePath.includes("/") ? "├─" : "•"}
+                </span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--text-2)" }}>{filePath}</span>
+                <span style={{ fontSize: "10px", color: "var(--text-4)", marginLeft: "auto" }}>
+                  {(files[filePath].length / 1000).toFixed(1)}k
+                </span>
               </div>
             ))}
           </div>
-
-          {/* Forged apps link */}
-          <button
-            onClick={onOpenApps}
-            className="mt-4 flex w-full items-center justify-between rounded-xl px-4 py-3"
-            style={{ background: "var(--bg-raised)", border: "1px solid var(--border-subtle)" }}
-          >
-            <span style={{ fontSize: "13px", color: "var(--text-3)" }}>No apps forged yet</span>
-            <span style={{ fontSize: "12px", color: "var(--text-4)" }}>View Apps →</span>
-          </button>
-
         </div>
       </div>
     </div>
   )
+
+  // ── Deploying state ──
+  if (forgeStatus === "deploying") return (
+    <div className="flex h-full flex-col items-center justify-center gap-6">
+      <div className="flex gap-1.5">
+        {[0,1,2].map(i => (
+          <div key={i} className="h-2 w-2 rounded-full" style={{ background: "var(--green)", animation: `pulse-dot 1.2s ease ${i*0.2}s infinite` }} />
+        ))}
+      </div>
+      <div className="text-center">
+        <p style={{ fontSize: "15px", fontWeight: 500, color: "var(--text-1)" }}>Deploying to VPS</p>
+        <p style={{ fontSize: "12px", color: "var(--text-3)", marginTop: "6px" }}>
+          Installing packages · Starting PM2 · Updating nginx
+        </p>
+        <p style={{ fontSize: "11px", color: "var(--text-4)", marginTop: "4px" }}>This takes about 30–60 seconds</p>
+      </div>
+    </div>
+  )
+
+  // ── Live state ──
+  if (forgeStatus === "live") return (
+    <div className="flex h-full flex-col items-center justify-center gap-6">
+      <div className="h-10 w-10 flex items-center justify-center rounded-2xl text-lg" style={{ background: "rgba(74,222,128,0.15)", border: "1px solid rgba(74,222,128,0.25)" }}>
+        ✓
+      </div>
+      <div className="text-center">
+        <p style={{ fontSize: "15px", fontWeight: 600, color: "var(--green)" }}>App is live</p>
+        <p style={{ fontSize: "12px", color: "var(--text-3)", marginTop: "6px" }}>{slug} · running on VPS</p>
+      </div>
+      <a
+        href={liveUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="rounded-xl px-6 py-2.5 font-medium"
+        style={{ background: "rgba(74,222,128,0.12)", border: "1px solid rgba(74,222,128,0.25)", fontSize: "13px", color: "var(--green)" }}
+      >
+        Open app →
+      </a>
+      <div className="flex gap-2 mt-2">
+        <button onClick={reset} className="rounded-lg px-3 py-1.5 text-[12px]" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)", color: "var(--text-3)" }}>
+          Build another
+        </button>
+        <button onClick={onOpenApps} className="rounded-lg px-3 py-1.5 text-[12px]" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)", color: "var(--text-3)" }}>
+          View all apps
+        </button>
+      </div>
+    </div>
+  )
+
+  // ── Error state ──
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-6 px-6">
+      <div className="h-10 w-10 flex items-center justify-center rounded-2xl" style={{ background: "rgba(248,113,113,0.12)", border: "1px solid rgba(248,113,113,0.25)", fontSize: "18px" }}>
+        ✗
+      </div>
+      <div className="text-center max-w-md">
+        <p style={{ fontSize: "15px", fontWeight: 500, color: "var(--red)" }}>Something went wrong</p>
+        <p style={{ fontSize: "12px", color: "var(--text-3)", marginTop: "6px", lineHeight: "1.6" }}>{errorMsg}</p>
+      </div>
+      <button onClick={reset} className="rounded-lg px-4 py-1.5 text-[13px]" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)", color: "var(--text-2)" }}>
+        Try again
+      </button>
+    </div>
+  )
 }
 
-/* ── Apps tab ── */
+// ── Apps Tab ─────────────────────────────────────────────────────────────────
+
 function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
-  return (
+  const [apps, setApps] = useState<ForgedApp[]>([])
+  const [loading, setLoading] = useState(true)
+
+  async function fetchApps() {
+    try {
+      const res = await fetch("/api/apps")
+      const data = await res.json()
+      setApps(Array.isArray(data) ? data : [])
+    } catch {
+      setApps([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function deleteApp(slug: string) {
+    await fetch("/api/apps", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slug }),
+    })
+    await fetchApps()
+  }
+
+  useEffect(() => { fetchApps() }, [])
+
+  if (loading) return (
+    <div className="flex h-full items-center justify-center">
+      <div style={{ fontSize: "13px", color: "var(--text-3)" }}>Loading apps…</div>
+    </div>
+  )
+
+  if (apps.length === 0) return (
     <div className="flex h-full flex-col items-center justify-center px-6">
       <div className="w-full max-w-xl text-center">
-        <div
-          className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-2xl text-lg"
-          style={{ background: "rgba(255,255,255,0.05)", border: "1px solid var(--border)" }}
-        >
-          □
-        </div>
-        <h2 className="text-lg font-semibold" style={{ color: "var(--text-1)" }}>
-          Forged Apps
-        </h2>
+        <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-2xl text-lg" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid var(--border)" }}>□</div>
+        <h2 className="text-lg font-semibold" style={{ color: "var(--text-1)" }}>No apps forged yet</h2>
         <p className="mt-2" style={{ fontSize: "13px", color: "var(--text-3)", lineHeight: "1.6" }}>
-          Apps you build with Forge live here — each one git-versioned,<br />
-          VPS-deployed, and fully managed by Foundry.
+          Use Forge to describe and deploy your first app. It will appear here automatically.
         </p>
-        <button
-          onClick={onOpenForge}
-          className="mt-6 rounded-xl px-6 py-2.5 text-[13px] font-medium"
-          style={{
-            background: "rgba(167,139,250,0.12)",
-            border: "1px solid rgba(167,139,250,0.25)",
-            color: "var(--forge)",
-          }}
-        >
+        <button onClick={onOpenForge} className="mt-6 rounded-xl px-6 py-2.5 text-[13px] font-medium" style={{ background: "rgba(167,139,250,0.12)", border: "1px solid rgba(167,139,250,0.25)", color: "var(--forge)" }}>
           ⚡ Open Forge
         </button>
-        <div
-          className="mt-8 rounded-2xl p-5 text-left"
-          style={{ background: "var(--bg-raised)", border: "1px solid var(--border-subtle)" }}
-        >
-          <p style={{ fontSize: "11px", letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-4)", marginBottom: "10px" }}>
-            Each app gets
-          </p>
-          {[
-            "A dedicated git repository",
-            "Its own VPS deployment, managed by PM2",
-            "A subdomain or path on your server",
-            "Full update and rollback control from Foundry",
-          ].map((item) => (
-            <div key={item} className="flex items-center gap-2.5 py-1.5">
-              <div className="h-1 w-1 rounded-full shrink-0" style={{ background: "var(--text-4)" }} />
-              <span style={{ fontSize: "12px", color: "var(--text-2)" }}>{item}</span>
-            </div>
-          ))}
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="h-full overflow-y-auto px-6 py-6">
+      <div className="mx-auto max-w-2xl">
+        <div className="mb-6 flex items-center justify-between">
+          <h2 style={{ fontSize: "15px", fontWeight: 600, color: "var(--text-1)" }}>Forged Apps</h2>
+          <button onClick={onOpenForge} className="rounded-lg px-3 py-1.5 text-[12px]" style={{ background: "rgba(167,139,250,0.1)", border: "1px solid rgba(167,139,250,0.2)", color: "var(--forge)" }}>
+            ⚡ New App
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          {apps.map((app) => {
+            const statusColor = app.status === "running" ? "var(--green)"
+              : app.status === "deploying" ? "var(--orange)"
+              : app.status === "error" ? "var(--red)"
+              : "var(--text-4)"
+
+            return (
+              <div key={app.id} className="overflow-hidden rounded-2xl" style={{ background: "var(--bg-raised)", border: "1px solid var(--border-subtle)" }}>
+                <div className="flex items-start justify-between p-4">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="h-1.5 w-1.5 rounded-full" style={{ background: statusColor }} />
+                      <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-1)" }}>{app.name || app.slug}</span>
+                      <span style={{ fontSize: "10px", color: "var(--text-4)", fontFamily: "var(--font-mono)" }}>{app.status}</span>
+                    </div>
+                    <p style={{ fontSize: "12px", color: "var(--text-3)", lineHeight: "1.4" }}>{app.description}</p>
+                  </div>
+
+                  <div className="flex items-center gap-2 ml-4 shrink-0">
+                    <a
+                      href={app.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-lg px-2.5 py-1.5 text-[11px]"
+                      style={{ background: "var(--bg-overlay)", border: "1px solid var(--border-subtle)", color: "var(--text-2)" }}
+                    >
+                      Open ↗
+                    </a>
+                    <button
+                      onClick={() => deleteApp(app.slug)}
+                      className="rounded-lg px-2.5 py-1.5 text-[11px]"
+                      style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.12)", color: "var(--red)" }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4 border-t px-4 py-2.5" style={{ borderColor: "var(--border-subtle)" }}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-4)" }}>:{app.port}</span>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-4)" }}>{app.pm2Name}</span>
+                  <span style={{ fontSize: "10px", color: "var(--text-4)", marginLeft: "auto" }}>
+                    {new Date(app.createdAt).toLocaleDateString()}
+                  </span>
+                </div>
+              </div>
+            )
+          })}
         </div>
       </div>
     </div>
   )
 }
 
-/* ── Inner page ── */
+// ── Inner page ────────────────────────────────────────────────────────────────
+
 function FoundryPage() {
   useCommandRuntime()
   useCommandPaletteKeyboard()
@@ -212,8 +464,6 @@ function FoundryPage() {
   const [activeTab, setActiveTab] = useState<Tab>("runtime")
   const [contextOpen, setContextOpen] = useState(true)
 
-  // Renamed: "Foundry" → "Runtime" (you're always inside Foundry;
-  // the tab describes what it IS, not what app you're in)
   const tabs: { id: Tab; label: string; symbol: string }[] = [
     { id: "runtime", label: "Runtime", symbol: "●" },
     { id: "forge",   label: "Forge",   symbol: "⚡" },
@@ -223,20 +473,14 @@ function FoundryPage() {
   return (
     <AppShell>
       <div className="flex h-screen flex-col overflow-hidden">
-
         <StatusRail />
 
         {/* Tab bar */}
-        <div
-          className="flex h-10 shrink-0 items-center justify-between px-4"
-          style={{ background: "var(--bg-raised)", borderBottom: "1px solid var(--border-subtle)" }}
-        >
+        <div className="flex h-10 shrink-0 items-center justify-between px-4" style={{ background: "var(--bg-raised)", borderBottom: "1px solid var(--border-subtle)" }}>
           <div className="flex items-center gap-1">
             {tabs.map(({ id, label, symbol }) => {
               const active = activeTab === id
-              const accentColor = id === "forge" ? "var(--forge)"
-                : id === "runtime" ? "var(--blue)"
-                : "var(--text-3)"
+              const accent = id === "forge" ? "var(--forge)" : id === "runtime" ? "var(--blue)" : "var(--text-3)"
               return (
                 <button
                   key={id}
@@ -249,7 +493,7 @@ function FoundryPage() {
                     color: active ? "var(--text-1)" : "var(--text-3)",
                   }}
                 >
-                  <span style={{ fontSize: id === "forge" ? "13px" : "8px", color: active ? accentColor : "var(--text-4)" }}>
+                  <span style={{ fontSize: id === "forge" ? "13px" : "8px", color: active ? accent : "var(--text-4)" }}>
                     {symbol}
                   </span>
                   {label}
@@ -263,11 +507,7 @@ function FoundryPage() {
               <button
                 onClick={() => setContextOpen(v => !v)}
                 className="rounded-lg px-2.5 py-1.5 text-[12px]"
-                style={{
-                  background: contextOpen ? "var(--bg-overlay)" : "transparent",
-                  border: `1px solid ${contextOpen ? "var(--border)" : "transparent"}`,
-                  color: contextOpen ? "var(--text-2)" : "var(--text-4)",
-                }}
+                style={{ background: contextOpen ? "var(--bg-overlay)" : "transparent", border: `1px solid ${contextOpen ? "var(--border)" : "transparent"}`, color: contextOpen ? "var(--text-2)" : "var(--text-4)" }}
               >
                 Context
               </button>
@@ -275,15 +515,9 @@ function FoundryPage() {
             <button
               onClick={openCommandPalette}
               className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5"
-              style={{
-                background: "var(--bg-overlay)",
-                border: "1px solid var(--border-subtle)",
-                fontSize: "12px",
-                color: "var(--text-3)",
-              }}
+              style={{ background: "var(--bg-overlay)", border: "1px solid var(--border-subtle)", fontSize: "12px", color: "var(--text-3)" }}
             >
-              Commands
-              <kbd style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-4)" }}>⌘K</kbd>
+              Commands <kbd style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-4)" }}>⌘K</kbd>
             </button>
           </div>
         </div>
@@ -302,13 +536,11 @@ function FoundryPage() {
               )}
             </>
           )}
-
           {activeTab === "forge" && (
             <div className="flex-1 overflow-hidden">
               <ForgeTab onOpenApps={() => setActiveTab("apps")} />
             </div>
           )}
-
           {activeTab === "apps" && (
             <div className="flex-1 overflow-hidden">
               <AppsTab onOpenForge={() => setActiveTab("forge")} />
