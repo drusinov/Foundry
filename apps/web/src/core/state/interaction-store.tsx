@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
 } from "react"
@@ -32,13 +33,6 @@ const InteractionContext =
     undefined,
   )
 
-const INITIAL_EVENT: OperationalEvent = {
-  id: "runtime-init",
-  type: "system_event",
-  content: "Foundry operational runtime initialized.",
-  createdAt: new Date().toISOString(),
-}
-
 export function InteractionProvider({
   children,
 }: {
@@ -49,10 +43,12 @@ export function InteractionProvider({
     setCommandPaletteOpen,
   ] = useState(false)
 
+  // Start empty — initial event added in useEffect so server and client
+  // both start with [] and avoid a hydration timestamp mismatch.
   const [
     operationalEvents,
     setOperationalEvents,
-  ] = useState<OperationalEvent[]>([INITIAL_EVENT])
+  ] = useState<OperationalEvent[]>([])
 
   const [
     latestCheckpoint,
@@ -74,6 +70,16 @@ export function InteractionProvider({
       "Core runtime instability during mutation",
     ],
   })
+
+  // Add the init event after hydration — prevents server/client timestamp mismatch
+  useEffect(() => {
+    setOperationalEvents([{
+      id: "runtime-init",
+      type: "system_event",
+      content: "Foundry operational runtime initialized.",
+      createdAt: new Date().toISOString(),
+    }])
+  }, [])
 
   const openCommandPalette = useCallback(() => {
     setCommandPaletteOpen(true)
