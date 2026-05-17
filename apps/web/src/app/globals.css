@@ -1,39 +1,137 @@
 @import "tailwindcss";
 
+/* ─── Foundry Design System ─── */
+/* Apple-inspired: system fonts, vibrancy, precision */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Fonts */
+  --font-ui: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, "Cascadia Code", monospace;
+
+  /* Backgrounds */
+  --bg-app:       #0A0A0C;
+  --bg-sidebar:   rgba(20, 20, 22, 0.92);
+  --bg-panel:     rgba(255, 255, 255, 0.032);
+  --bg-hover:     rgba(255, 255, 255, 0.058);
+  --bg-selected:  rgba(10, 132, 255, 0.14);
+  --bg-elevated:  rgba(255, 255, 255, 0.05);
+
+  /* Labels — Apple hierarchy */
+  --label-1: rgba(255, 255, 255, 0.88);
+  --label-2: rgba(235, 235, 245, 0.55);
+  --label-3: rgba(235, 235, 245, 0.28);
+  --label-4: rgba(235, 235, 245, 0.13);
+
+  /* Separators */
+  --sep:        rgba(84, 84, 88, 0.48);
+  --sep-subtle: rgba(84, 84, 88, 0.24);
+
+  /* System Colors — Apple palette */
+  --blue:   #0A84FF;
+  --green:  #30D158;
+  --orange: #FF9F0A;
+  --red:    #FF453A;
+  --purple: #BF5AF2;
+  --cyan:   #64D2FF;
+  --teal:   #40C8E0;
+
+  /* Semantic */
+  --accent: var(--blue);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* ─── Base ─── */
+*, *::before, *::after {
+  box-sizing: border-box;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-}
-
-html,
-body,
-#__next {
-  width: 100%;
+html, body, #__next {
   height: 100%;
   overflow: hidden;
 }
 
 body {
   margin: 0;
-  background: #070b14;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--label-1);
+  background-color: var(--bg-app);
+  /* Subtle ambient depth — like macOS desktop */
+  background-image:
+    radial-gradient(ellipse 900px 700px at 12% 35%, rgba(10, 132, 255, 0.035) 0%, transparent 100%),
+    radial-gradient(ellipse 700px 500px at 88% 75%, rgba(48, 209, 88, 0.022) 0%, transparent 100%);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Typography scale ─── */
+.text-label   { font-size: 11px; font-weight: 500; letter-spacing: 0.055em; text-transform: uppercase; color: var(--label-3); }
+.text-caption { font-size: 11px; color: var(--label-3); }
+.text-body    { font-size: 13px; color: var(--label-1); }
+.text-mono    { font-family: var(--font-mono); font-size: 11px; }
+
+/* ─── Scrollbar — macOS style ─── */
+::-webkit-scrollbar       { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 100px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.22); }
+
+/* ─── Sidebar glass vibrancy ─── */
+.sidebar-glass {
+  background: var(--bg-sidebar);
+  backdrop-filter: blur(24px) saturate(1.8);
+  -webkit-backdrop-filter: blur(24px) saturate(1.8);
+}
+
+/* ─── Palette glass ─── */
+.palette-glass {
+  background: rgba(38, 38, 40, 0.94);
+  backdrop-filter: blur(48px) saturate(2);
+  -webkit-backdrop-filter: blur(48px) saturate(2);
+}
+
+/* ─── Menubar glass ─── */
+.menubar-glass {
+  background: rgba(14, 14, 16, 0.88);
+  backdrop-filter: blur(20px) saturate(1.6);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+}
+
+/* ─── Status dot — live pulse ─── */
+@keyframes pulse-live {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.45; }
+}
+.dot-live { animation: pulse-live 2.4s ease-in-out infinite; }
+
+/* ─── Event slide-in ─── */
+@keyframes event-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.event-in { animation: event-in 0.18s ease forwards; }
+
+/* ─── Palette open ─── */
+@keyframes palette-open {
+  from { opacity: 0; transform: translateY(-8px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.palette-open { animation: palette-open 0.15s ease forwards; }
+
+/* ─── Focus ring — Apple style ─── */
+:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ─── Selection ─── */
+::selection {
+  background: rgba(10, 132, 255, 0.35);
+}
+
+/* ─── Input reset ─── */
+input, textarea {
+  font-family: var(--font-ui);
+  font-size: 13px;
 }

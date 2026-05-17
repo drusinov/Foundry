@@ -1,25 +1,28 @@
 "use client"
 
-import {
-  useEffect,
-  useMemo,
-  useState,
-} from "react"
-
+import { useEffect, useMemo, useState } from "react"
 import { commandRegistry } from "@/core/registry/command-registry"
 import { useCommandActions } from "@/core/registry/command-actions"
 
-type Props = {
-  open: boolean
+// Symbol map — Apple-style icons for each command
+const COMMAND_SYMBOLS: Record<string, string> = {
+  "open-command-palette":  "⌘",
+  "save-checkpoint":       "↓",
+  "restore-checkpoint":    "↑",
+  "push-updates":          "↗",
+  "health-check":          "◎",
+  "export-continuity":     "⤴",
+  "compact-runtime":       "⊡",
+  "generate-handoff":      "≡",
+  "restart-runtime":       "↺",
 }
 
+type Props = { open: boolean }
+
 export function CommandPalette({ open }: Props) {
-  const [query, setQuery] = useState("")
-
-  const [selectedIndex, setSelectedIndex] =
-    useState(0)
-
-  const { executeCommand } = useCommandActions()
+  const [query, setQuery]           = useState("")
+  const [selectedIndex, setSelectedIndex] = useState(0)
+  const { executeCommand }          = useCommandActions()
 
   const filteredCommands = useMemo(() => {
     const q = query.toLowerCase().trim()
@@ -29,153 +32,199 @@ export function CommandPalette({ open }: Props) {
     )
   }, [query])
 
-  // Reset selection when filter changes
-  useEffect(() => {
-    setSelectedIndex(0)
-  }, [query])
+  // Reset selection on filter change
+  useEffect(() => { setSelectedIndex(0) }, [query])
 
-  // Reset state when palette closes
+  // Reset on close
   useEffect(() => {
-    if (!open) {
-      setQuery("")
-      setSelectedIndex(0)
-    }
+    if (!open) { setQuery(""); setSelectedIndex(0) }
   }, [open])
 
-  // Keyboard navigation — scoped to open state
-  // Uses filteredCommands so Enter always executes
-  // the visually selected item, not a registry index.
+  // Keyboard navigation
   useEffect(() => {
     if (!open) return
 
-    function handleKeyDown(
-      event: KeyboardEvent,
-    ) {
-      if (event.key === "ArrowDown") {
-        event.preventDefault()
-        setSelectedIndex((i) =>
-          Math.min(
-            i + 1,
-            filteredCommands.length - 1,
-          ),
-        )
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault()
+        setSelectedIndex((i) => Math.min(i + 1, filteredCommands.length - 1))
         return
       }
-
-      if (event.key === "ArrowUp") {
-        event.preventDefault()
-        setSelectedIndex((i) =>
-          Math.max(i - 1, 0),
-        )
+      if (e.key === "ArrowUp") {
+        e.preventDefault()
+        setSelectedIndex((i) => Math.max(i - 1, 0))
         return
       }
-
-      if (event.key === "Enter") {
-        event.preventDefault()
-        const command =
-          filteredCommands[selectedIndex]
-        if (command) {
-          executeCommand(command)
-          setQuery("")
-        }
+      if (e.key === "Enter") {
+        e.preventDefault()
+        const cmd = filteredCommands[selectedIndex]
+        if (cmd) { executeCommand(cmd); setQuery("") }
       }
     }
 
-    window.addEventListener(
-      "keydown",
-      handleKeyDown,
-    )
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [open, filteredCommands, selectedIndex, executeCommand])
 
-    return () => {
-      window.removeEventListener(
-        "keydown",
-        handleKeyDown,
-      )
-    }
-  }, [
-    open,
-    filteredCommands,
-    selectedIndex,
-    executeCommand,
-  ])
-
-  if (!open) {
-    return null
-  }
+  if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-sm">
-      <div className="mt-20 w-full max-w-2xl overflow-hidden rounded-2xl border border-white/10 bg-[#0C0E14] shadow-2xl">
-        {/* Search */}
-        <div className="flex items-center gap-3 border-b border-white/10 px-5">
-          <span className="shrink-0 text-sm text-zinc-600">
-            ⌘
-          </span>
+    /* Backdrop */
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center pt-[18vh]"
+      style={{ background: "rgba(0,0,0,0.52)", backdropFilter: "blur(8px)" }}
+    >
+      {/* Palette */}
+      <div
+        className="palette-glass palette-open w-full max-w-[620px] overflow-hidden rounded-2xl shadow-2xl"
+        style={{
+          border: "1px solid rgba(255,255,255,0.1)",
+          boxShadow: "0 32px 80px rgba(0,0,0,0.7), 0 0 0 0.5px rgba(255,255,255,0.06)",
+        }}
+      >
+        {/* Search field */}
+        <div
+          className="flex items-center gap-3 px-4"
+          style={{ borderBottom: "1px solid var(--sep-subtle)" }}
+        >
+          {/* Spotlight magnifier */}
+          <svg
+            width="15" height="15" viewBox="0 0 15 15" fill="none"
+            style={{ color: "var(--label-3)", flexShrink: 0 }}
+          >
+            <path
+              d="M10 6.5C10 8.43 8.43 10 6.5 10C4.57 10 3 8.43 3 6.5C3 4.57 4.57 3 6.5 3C8.43 3 10 4.57 10 6.5ZM9.43 10.14L12.15 12.86"
+              stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"
+            />
+          </svg>
 
           <input
             autoFocus
             value={query}
-            onChange={(event) =>
-              setQuery(event.target.value)
-            }
-            placeholder="Search runtime commands..."
-            className="flex-1 bg-transparent py-4 text-sm text-white outline-none placeholder:text-zinc-600"
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search runtime commands…"
+            className="flex-1 bg-transparent py-4 outline-none"
+            style={{
+              fontSize: "15px",
+              color: "var(--label-1)",
+              fontFamily: "var(--font-ui)",
+            }}
           />
 
-          <span className="shrink-0 text-[11px] text-zinc-700">
-            ESC to close
-          </span>
+          {/* ESC badge */}
+          <kbd
+            className="rounded px-1.5 py-0.5 text-[10px] select-none"
+            style={{
+              background: "var(--bg-elevated)",
+              border: "1px solid var(--sep-subtle)",
+              color: "var(--label-3)",
+              fontFamily: "var(--font-ui)",
+            }}
+          >
+            esc
+          </kbd>
         </div>
 
-        {/* Command list */}
-        <div className="max-h-[360px] overflow-y-auto">
+        {/* Results */}
+        <div className="max-h-[340px] overflow-y-auto py-1.5">
           {filteredCommands.length === 0 ? (
-            <div className="px-5 py-10 text-center text-sm text-zinc-700">
-              No commands found
+            <div
+              className="px-4 py-8 text-center text-[13px]"
+              style={{ color: "var(--label-3)" }}
+            >
+              No commands match &ldquo;{query}&rdquo;
             </div>
           ) : (
-            filteredCommands.map(
-              (command, index) => (
+            filteredCommands.map((cmd, idx) => {
+              const active = selectedIndex === idx
+              return (
                 <button
-                  key={command.id}
-                  onMouseEnter={() =>
-                    setSelectedIndex(index)
-                  }
-                  onClick={() => {
-                    executeCommand(command)
-                    setQuery("")
+                  key={cmd.id}
+                  onMouseEnter={() => setSelectedIndex(idx)}
+                  onClick={() => { executeCommand(cmd); setQuery("") }}
+                  className="flex w-full items-center gap-3 px-3 py-2 mx-1.5 transition-none"
+                  style={{
+                    width: "calc(100% - 12px)",
+                    borderRadius: "8px",
+                    background: active ? "var(--bg-selected)" : "transparent",
                   }}
-                  className={`flex w-full items-center justify-between px-5 py-3 text-left transition ${
-                    selectedIndex === index
-                      ? "bg-white/[0.08] text-white"
-                      : "text-zinc-400 hover:bg-white/[0.04]"
-                  }`}
                 >
-                  <span className="text-sm font-medium">
-                    {command.label}
+                  {/* Symbol */}
+                  <div
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[14px]"
+                    style={{
+                      background: active
+                        ? "rgba(10,132,255,0.18)"
+                        : "var(--bg-elevated)",
+                      color: active ? "var(--blue)" : "var(--label-3)",
+                      fontFamily: "var(--font-ui)",
+                    }}
+                  >
+                    {COMMAND_SYMBOLS[cmd.id] ?? "·"}
+                  </div>
+
+                  {/* Label */}
+                  <span
+                    className="flex-1 text-left text-[13px] font-medium"
+                    style={{ color: active ? "var(--label-1)" : "var(--label-2)" }}
+                  >
+                    {cmd.label}
                   </span>
 
-                  {command.shortcut.length >
-                    0 && (
-                    <span className="font-mono text-[11px] text-zinc-700">
-                      {command.shortcut.join(
-                        " ",
-                      )}
-                    </span>
+                  {/* Shortcut */}
+                  {cmd.shortcut.length > 0 && (
+                    <div className="flex items-center gap-0.5">
+                      {cmd.shortcut.map((key, i) => (
+                        <kbd
+                          key={i}
+                          className="rounded px-1.5 py-0.5 text-[10px]"
+                          style={{
+                            background: active ? "rgba(10,132,255,0.15)" : "var(--bg-elevated)",
+                            border: `1px solid ${active ? "rgba(10,132,255,0.3)" : "var(--sep-subtle)"}`,
+                            color: active ? "var(--blue)" : "var(--label-3)",
+                            fontFamily: "var(--font-mono)",
+                          }}
+                        >
+                          {key}
+                        </kbd>
+                      ))}
+                    </div>
                   )}
                 </button>
-              ),
-            )
+              )
+            })
           )}
         </div>
 
-        {/* Footer */}
-        <div className="border-t border-white/[0.06] px-5 py-2">
-          <div className="flex items-center gap-5 text-[11px] text-zinc-700">
-            <span>↑↓ navigate</span>
-            <span>↵ execute</span>
-            <span>⌘K toggle</span>
-          </div>
+        {/* Footer hints — Apple HIG style */}
+        <div
+          className="flex items-center gap-4 px-4 py-2.5"
+          style={{
+            borderTop: "1px solid var(--sep-subtle)",
+          }}
+        >
+          {[
+            ["↑↓", "navigate"],
+            ["↵", "execute"],
+            ["⌘K", "close"],
+          ].map(([key, label]) => (
+            <div key={key} className="flex items-center gap-1.5">
+              <kbd
+                className="rounded px-1.5 py-0.5 text-[10px]"
+                style={{
+                  background: "var(--bg-elevated)",
+                  border: "1px solid var(--sep-subtle)",
+                  color: "var(--label-3)",
+                  fontFamily: "var(--font-mono)",
+                }}
+              >
+                {key}
+              </kbd>
+              <span style={{ fontSize: "11px", color: "var(--label-4)" }}>
+                {label}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
     </div>
