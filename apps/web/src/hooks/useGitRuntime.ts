@@ -5,35 +5,48 @@ import {
   useState,
 } from "react"
 
-import type { GitRuntimeState } from "@/core/types/git-runtime"
+import type {
+  GitRuntime,
+} from "@/core/types/git-runtime"
 
 export function useGitRuntime() {
   const [
-    gitRuntime,
-    setGitRuntime,
-  ] = useState<GitRuntimeState | null>(
+    runtime,
+    setRuntime,
+  ] = useState<GitRuntime | null>(
     null,
   )
 
   useEffect(() => {
-    async function loadGitRuntime() {
+    async function load() {
       try {
         const response =
           await fetch(
             "/api/git-state",
           )
 
-        const data =
-          await response.json()
+        if (!response.ok) {
+          throw new Error(
+            "Failed to fetch git runtime",
+          )
+        }
 
-        setGitRuntime(data)
+        const text =
+          await response.text()
+
+        const data =
+          JSON.parse(text)
+
+        setRuntime(data)
       } catch (error) {
         console.error(error)
+
+        setRuntime(null)
       }
     }
 
-    loadGitRuntime()
+    load()
   }, [])
 
-  return gitRuntime
+  return runtime
 }

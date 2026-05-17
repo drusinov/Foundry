@@ -5,35 +5,48 @@ import {
   useState,
 } from "react"
 
-import type { FileRuntimeState } from "@/core/types/file-runtime"
+import type {
+  FileRuntime,
+} from "@/core/types/file-runtime"
 
 export function useFileRuntime() {
   const [
-    fileRuntime,
-    setFileRuntime,
-  ] = useState<FileRuntimeState | null>(
+    runtime,
+    setRuntime,
+  ] = useState<FileRuntime | null>(
     null,
   )
 
   useEffect(() => {
-    async function loadFileRuntime() {
+    async function load() {
       try {
         const response =
           await fetch(
             "/api/file-runtime",
           )
 
-        const data =
-          await response.json()
+        if (!response.ok) {
+          throw new Error(
+            "Failed to fetch file runtime",
+          )
+        }
 
-        setFileRuntime(data)
+        const text =
+          await response.text()
+
+        const data =
+          JSON.parse(text)
+
+        setRuntime(data)
       } catch (error) {
         console.error(error)
+
+        setRuntime(null)
       }
     }
 
-    loadFileRuntime()
+    load()
   }, [])
 
-  return fileRuntime
+  return runtime
 }
