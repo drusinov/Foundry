@@ -4,6 +4,7 @@ import { createRuntimeId } from "@/core/utils/create-runtime-id"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useInteraction } from "@/core/state/interaction-store"
 import { useGitRuntime } from "@/hooks/useGitRuntime"
+import { useFileRuntime } from "@/hooks/useFileRuntime"
 import { useAiRuntime } from "@/hooks/useAiRuntime"
 import { generateRuntimeImpacts } from "@/core/runtime/runtime-impact-engine"
 import { generateCompressedContext } from "@/core/context/generate-compressed-context"
@@ -50,6 +51,7 @@ export function OperationalChat() {
   const { latestCheckpoint, operationalEvents, appendOperationalEvent } = useInteraction()
   const gitRuntime    = useGitRuntime()
   const { loading, executePrompt } = useAiRuntime()
+  const fileRuntime = useFileRuntime()
   const bottomRef     = useRef<HTMLDivElement | null>(null)
 
   const [openaiKey,    setOpenaiKey]    = useState("")
@@ -86,6 +88,7 @@ export function OperationalChat() {
       gitRuntime,
       runtimeImpacts: impacts,
       latestCheckpoint,
+      fileRuntime,
       operationalMessages: operationalEvents.map((e) => ({
         id: e.id, role: e.type === "command" ? "user" : "system",
         content: e.content, createdAt: e.createdAt,
