@@ -1,7 +1,7 @@
 "use client"
 
 import { createRuntimeId } from "@/core/utils/create-runtime-id"
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useInteraction } from "@/core/state/interaction-store"
 import { useGitRuntime } from "@/hooks/useGitRuntime"
 import { useAiRuntime } from "@/hooks/useAiRuntime"
@@ -33,8 +33,13 @@ export function OperationalChat() {
   const { loading, executePrompt } = useAiRuntime()
   const bottomRef     = useRef<HTMLDivElement | null>(null)
 
-  const [apiKey, setApiKey] = useState(() => typeof window === "undefined" ? "" : (localStorage.getItem("foundry-key") ?? ""))
+  const [apiKey, setApiKey] = useState("")
   const [showKey, setShowKey] = useState(false)
+
+  useEffect(() => {
+    const saved = localStorage.getItem("foundry-key")
+    if (saved) setApiKey(saved)
+  }, [])
   const [input, setInput]     = useState("")
   const [prompt, setPrompt]   = useState("")
 
