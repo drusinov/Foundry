@@ -28,7 +28,10 @@ function walkDirectory(
     }
 
     if (entry.isDirectory()) {
-      walkDirectory(fullPath, files)
+      walkDirectory(
+        fullPath,
+        files,
+      )
     } else {
       files.push(fullPath)
     }
@@ -43,23 +46,36 @@ export async function GET() {
       process.cwd()
 
     const files =
-      walkDirectory(projectRoot)
-
-    const relativeFiles =
-      files.map((file) =>
-        path.relative(projectRoot, file),
+      walkDirectory(projectRoot).map(
+        (file) =>
+          path.relative(
+            projectRoot,
+            file,
+          ),
       )
 
     return NextResponse.json({
+      files,
+
       totalFiles:
-        relativeFiles.length,
+        files.length,
 
       recentFiles:
-        relativeFiles.slice(-10).reverse(),
+        files
+          .slice(-10)
+          .reverse(),
     })
   } catch (error) {
+    console.error(error)
+
     return NextResponse.json(
       {
+        files: [],
+
+        totalFiles: 0,
+
+        recentFiles: [],
+
         error:
           "Failed to read filesystem runtime",
       },
