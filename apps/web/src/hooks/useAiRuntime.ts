@@ -4,20 +4,22 @@ export function useAiRuntime() {
   const [loading, setLoading] = useState(false)
 
   async function executePrompt(
-    apiKey: string,
+    keys: { openaiKey: string; anthropicKey: string },
     prompt: string,
-  ): Promise<string | null> {
+  ): Promise<{ content: string; pipeline: string } | null> {
     setLoading(true)
 
     try {
       const response = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey, prompt }),
+        body: JSON.stringify({
+          openaiKey:    keys.openaiKey,
+          anthropicKey: keys.anthropicKey,
+          prompt,
+        }),
       })
 
-      // Read as text first — if nginx times out or returns an HTML error
-      // page, response.json() will throw. This handles it gracefully.
       const text = await response.text()
 
       let data: Record<string, unknown>
@@ -25,20 +27,29 @@ export function useAiRuntime() {
         data = JSON.parse(text)
       } catch {
         console.error("[useAiRuntime] Non-JSON response:", text.slice(0, 200))
-        return "The server returned an unexpected response. This usually means the request took too long and nginx timed out. Try again or check your VPS nginx proxy_read_timeout setting."
+        return {
+          content:  "Server returned an unexpected response. This usually means a timeout. Try again.",
+          pipeline: "error",
+        }
       }
 
       if (!response.ok) {
-        const msg = typeof data.error === "string"
-          ? data.error
-          : "AI request failed"
-        return `Error: ${msg}`
+        return {
+          content:  typeof data.error === "string" ? `Error: ${data.error}` : "Request failed.",
+          pipeline: "error",
+        }
       }
 
-      return typeof data.content === "string" ? data.content : null
+      return {
+        content:  typeof data.content  === "string" ? data.content  : "Empty response.",
+        pipeline: typeof data.pipeline === "string" ? data.pipeline : "unknown",
+      }
     } catch (err) {
       console.error("[useAiRuntime]", err)
-      return "Network error — could not reach the AI runtime."
+      return {
+        content:  "Network error — could not reach the AI runtime.",
+        pipeline: "error",
+      }
     } finally {
       setLoading(false)
     }
