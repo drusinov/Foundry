@@ -12,7 +12,7 @@ Your ENTIRE response must be a single valid JSON object mapping file paths to fi
 No markdown. No backticks. No explanation. No preamble. Just the raw JSON object.
 
 Example response format:
-{"package.json":"...","next.config.ts":"...","src/app/page.tsx":"..."}
+{"package.json":"...","next.config.mjs":"...","src/app/page.tsx":"..."}
 `.trim()
 
 function slugify(description: string): string {
@@ -48,7 +48,7 @@ Deployment path: "/apps/${slug}"
 
 Required files (include all of these):
 - package.json
-- next.config.ts
+- next.config.js
 - tailwind.config.ts
 - postcss.config.mjs
 - src/app/layout.tsx
@@ -56,7 +56,7 @@ Required files (include all of these):
 - src/app/globals.css
 
 Rules:
-1. next.config.ts MUST set: basePath: '/apps/${slug}'
+1. next.config.mjs MUST set: basePath: '/apps/${slug}'
 2. package.json: name="${slug}", deps=(next@14, react, react-dom, typescript, @types/node, @types/react, @types/react-dom, tailwindcss, postcss, autoprefixer), scripts=(dev, build, start, lint)
 3. Use Tailwind CSS properly with dark theme
 4. Implement the described functionality fully and polishedly
