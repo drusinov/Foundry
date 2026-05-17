@@ -2,93 +2,51 @@
 
 import { useEffect } from "react"
 
-import { commandRegistry } from "@/core/registry/command-registry"
-
-import { useCommandActions } from "@/core/registry/command-actions"
-
 import { useInteraction } from "@/core/state/interaction-store"
 
+/**
+ * Global keyboard handler for command palette lifecycle.
+ *
+ * Scope: ⌘K (toggle) and Escape (close) only.
+ *
+ * Arrow key navigation and Enter execution are handled
+ * inside CommandPalette where the filtered list is known.
+ * Keeping navigation here would index the wrong array.
+ */
 export function useCommandPaletteKeyboard() {
   const {
     commandPaletteOpen,
-
-    selectedCommandIndex,
-
     openCommandPalette,
     closeCommandPalette,
-
-    setSelectedCommandIndex,
   } = useInteraction()
-
-  const { executeCommand } =
-    useCommandActions()
 
   useEffect(() => {
     function handleKeyDown(
       event: KeyboardEvent,
     ) {
+      // ⌘K / Ctrl+K — toggle
       if (
-        event.metaKey &&
+        (event.metaKey || event.ctrlKey) &&
         event.key.toLowerCase() === "k"
       ) {
         event.preventDefault()
 
-        openCommandPalette()
-
-        return
-      }
-
-      if (!commandPaletteOpen) {
-        return
-      }
-
-      if (event.key === "Escape") {
-        event.preventDefault()
-
-        closeCommandPalette()
-
-        return
-      }
-
-      if (event.key === "ArrowDown") {
-        event.preventDefault()
-
-        setSelectedCommandIndex(
-          Math.min(
-            selectedCommandIndex + 1,
-            commandRegistry.length - 1,
-          ),
-        )
-
-        return
-      }
-
-      if (event.key === "ArrowUp") {
-        event.preventDefault()
-
-        setSelectedCommandIndex(
-          Math.max(
-            selectedCommandIndex - 1,
-            0,
-          ),
-        )
-
-        return
-      }
-
-      if (event.key === "Enter") {
-        event.preventDefault()
-
-        const command =
-          commandRegistry[
-            selectedCommandIndex
-          ]
-
-        if (!command) {
-          return
+        if (commandPaletteOpen) {
+          closeCommandPalette()
+        } else {
+          openCommandPalette()
         }
 
-        executeCommand(command)
+        return
+      }
+
+      // Escape — close when open
+      if (
+        commandPaletteOpen &&
+        event.key === "Escape"
+      ) {
+        event.preventDefault()
+        closeCommandPalette()
       }
     }
 
@@ -105,14 +63,7 @@ export function useCommandPaletteKeyboard() {
     }
   }, [
     commandPaletteOpen,
-
-    selectedCommandIndex,
-
     openCommandPalette,
     closeCommandPalette,
-
-    setSelectedCommandIndex,
-
-    executeCommand,
   ])
 }

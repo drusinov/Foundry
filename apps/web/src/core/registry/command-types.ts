@@ -1,13 +1,16 @@
 export type CommandId =
   | "open-command-palette"
-  | "focus-orbit"
-  | "focus-thread"
-  | "focus-inspector"
-  | "create-brief"
-  | "dispatch-run"
+  | "save-checkpoint"
+  | "restore-checkpoint"
+  | "push-updates"
+  | "health-check"
+  | "export-continuity"
+  | "compact-runtime"
+  | "generate-handoff"
+  | "restart-runtime"
 
 export interface CommandDefinition {
   id: CommandId
-  title: string
+  label: string
   shortcut: string[]
 }

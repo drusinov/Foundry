@@ -1,14 +1,14 @@
 import type { OperationalMessage } from "@/core/types/operational-message"
 
-import type { CheckpointSnapshot } from "@/core/state/interaction-store"
-
 import type { SessionRuntime } from "@/core/types/session-runtime"
 
+// Note: CheckpointSnapshot was removed — interaction-store never exported it.
+// Persistence is keyed on checkpoints as plain strings.
 export type PersistedRuntimeState =
   {
     operationalMessages: OperationalMessage[]
 
-    checkpointHistory: CheckpointSnapshot[]
+    checkpointHistory: string[]
 
     activeCheckpointId: string | null
 

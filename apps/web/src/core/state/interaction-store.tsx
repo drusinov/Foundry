@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useMemo,
   useState,
@@ -11,60 +12,32 @@ import type {
   OperationalEvent,
 } from "@/core/types/operational-event"
 
-import { createRuntimeId } from "@/core/utils/create-runtime-id"
+// Import canonical SessionRuntime from types — activeRisks is string[]
+import type { SessionRuntime } from "@/core/types/session-runtime"
 
-type SessionRuntime = {
-  currentObjective: string
-
-  activeWorkstream: string
-
-  nextAction: string
-
-  activeRisks: string
-
-  runtimeState: string
+type InteractionContextValue = {
+  commandPaletteOpen: boolean
+  openCommandPalette: () => void
+  closeCommandPalette: () => void
+  latestCheckpoint: string
+  setLatestCheckpoint: (checkpoint: string) => void
+  operationalEvents: OperationalEvent[]
+  appendOperationalEvent: (event: OperationalEvent) => void
+  sessionRuntime: SessionRuntime
+  setSessionRuntime: (runtime: SessionRuntime) => void
 }
 
-type InteractionContextValue =
-  {
-    commandPaletteOpen: boolean
-
-    openCommandPalette: () => void
-
-    closeCommandPalette: () => void
-
-    latestCheckpoint: string
-
-    operationalEvents: OperationalEvent[]
-
-    appendOperationalEvent: (
-      event: OperationalEvent,
-    ) => void
-
-    sessionRuntime: SessionRuntime
-
-    setSessionRuntime: (
-      runtime: SessionRuntime,
-    ) => void
-  }
-
 const InteractionContext =
-  createContext<
-    InteractionContextValue | undefined
-  >(undefined)
+  createContext<InteractionContextValue | undefined>(
+    undefined,
+  )
 
-const INITIAL_EVENT: OperationalEvent =
-  {
-    id: "runtime-init",
-
-    type: "system_event",
-
-    content:
-      "Foundry operational runtime initialized.",
-
-    createdAt:
-      "2026-05-17T07:00:00.000Z",
-  }
+const INITIAL_EVENT: OperationalEvent = {
+  id: "runtime-init",
+  type: "system_event",
+  content: "Foundry operational runtime initialized.",
+  createdAt: new Date().toISOString(),
+}
 
 export function InteractionProvider({
   children,
@@ -79,98 +52,79 @@ export function InteractionProvider({
   const [
     operationalEvents,
     setOperationalEvents,
-  ] = useState<
-    OperationalEvent[]
-  >([INITIAL_EVENT])
+  ] = useState<OperationalEvent[]>([INITIAL_EVENT])
 
   const [
     latestCheckpoint,
-  ] = useState(
-    "checkpoint-runtime-v1",
-  )
+    setLatestCheckpoint,
+  ] = useState("checkpoint-runtime-v1")
 
+  // activeRisks is now string[] to match SessionRuntime type
   const [
     sessionRuntime,
     setSessionRuntime,
   ] = useState<SessionRuntime>({
     currentObjective:
       "Implement runtime cognition architecture",
-
     activeWorkstream:
       "Workspace Runtime Evolution",
-
     nextAction:
       "Define workspace isolation architecture",
-
-    activeRisks:
+    activeRisks: [
       "Core runtime instability during mutation",
-
-    runtimeState:
-      "Operational",
+    ],
   })
 
-  function openCommandPalette() {
+  const openCommandPalette = useCallback(() => {
     setCommandPaletteOpen(true)
-  }
+  }, [])
 
-  function closeCommandPalette() {
+  const closeCommandPalette = useCallback(() => {
     setCommandPaletteOpen(false)
-  }
+  }, [])
 
-  function appendOperationalEvent(
-    event: OperationalEvent,
-  ) {
-    setOperationalEvents(
-      (current) => [
+  const appendOperationalEvent = useCallback(
+    (event: OperationalEvent) => {
+      setOperationalEvents((current) => [
         ...current,
         event,
-      ],
-    )
-  }
+      ])
+    },
+    [],
+  )
 
   const value = useMemo(
     () => ({
       commandPaletteOpen,
-
       openCommandPalette,
-
       closeCommandPalette,
-
       latestCheckpoint,
-
+      setLatestCheckpoint,
       operationalEvents,
-
       appendOperationalEvent,
-
       sessionRuntime,
-
       setSessionRuntime,
     }),
     [
       commandPaletteOpen,
-
+      openCommandPalette,
+      closeCommandPalette,
       latestCheckpoint,
-
       operationalEvents,
-
+      appendOperationalEvent,
       sessionRuntime,
     ],
   )
 
   return (
-    <InteractionContext.Provider
-      value={value}
-    >
+    <InteractionContext.Provider value={value}>
       {children}
     </InteractionContext.Provider>
   )
 }
 
 export function useInteraction() {
-  const context =
-    useContext(
-      InteractionContext,
-    )
+  const context = useContext(InteractionContext)
 
   if (!context) {
     throw new Error(

@@ -35,7 +35,7 @@ function formatEntry(
     return `- CONVERGENCE GENERATED`
   }
 
-  return `- ${entry.type.toUpperCase()}`
+  return ""
 }
 
 export function generateContextSummary({

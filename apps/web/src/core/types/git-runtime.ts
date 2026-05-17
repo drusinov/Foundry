@@ -11,3 +11,6 @@ export type GitRuntimeState = {
 
   diffEntries: GitDiffEntry[]
 }
+
+// Alias used by generate-compressed-context and useGitRuntime
+export type GitRuntime = GitRuntimeState

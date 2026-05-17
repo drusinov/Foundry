@@ -42,24 +42,26 @@ export function generateCompressedContext({
       )
       .join("\n\n")
 
+  // Fix: impact has `impacts: string[]`, not `description`
   const runtimeSummary =
     runtimeImpacts
       .map(
         (impact) =>
-          `• ${impact.title}: ${impact.description}`,
+          `• ${impact.title}: ${impact.impacts.join(", ")}`,
       )
       .join("\n")
 
+  // Fix: GitDiffEntry has `status` and `file`, not `changeType`/`filePath`
   const changedFiles =
     gitRuntime?.diffEntries
       ?.map(
         (entry) =>
-          `${entry.changeType} ${entry.filePath}`,
+          `${entry.status} ${entry.file}`,
       )
       .join("\n") ?? "No modified files."
 
   return `
-FOUNDARY OPERATIONAL CONTINUITY
+FOUNDRY OPERATIONAL CONTINUITY
 
 CHECKPOINT:
 ${latestCheckpoint}

@@ -1,93 +1,84 @@
 import type { CommandDefinition } from "./command-types"
 
-import { generateContextSummary } from "@/core/context/generate-context-summary"
-
 import { useInteraction } from "@/core/state/interaction-store"
 
 export function useCommandActions() {
   const {
-    appendEntry,
+    appendOperationalEvent,
     closeCommandPalette,
-
     latestCheckpoint,
-
-    entries,
-
     setLatestCheckpoint,
-
-    setActiveCheckpointId,
-
-    appendCheckpoint,
   } = useInteraction()
 
-  function executeCommand(
-    command: CommandDefinition,
-  ) {
-    let message =
-      `COMMAND EXECUTED · ${command.label}`
-
-    if (command.id === "save-checkpoint") {
-      const checkpoint =
-        `checkpoint-${Date.now()}`
-
-      setLatestCheckpoint(checkpoint)
-
-      setActiveCheckpointId(
-        checkpoint,
-      )
-
-      const summary =
-        generateContextSummary({
-          latestCheckpoint:
-            checkpoint,
-
-          entries,
-        })
-
-      appendCheckpoint({
-        id: checkpoint,
-
-        createdAt:
-          new Date().toISOString(),
-
-        summary,
-      })
-
-      message =
-        `CHECKPOINT SAVED · ${checkpoint}`
+  function executeCommand(command: CommandDefinition) {
+    // Palette is already open when this fires — close and return
+    if (command.id === "open-command-palette") {
+      closeCommandPalette()
+      return
     }
 
-    if (
-      command.id === "restore-checkpoint"
-    ) {
-      message =
-        `CHECKPOINT RESTORE REQUESTED`
+    let content: string
+
+    switch (command.id) {
+      case "save-checkpoint": {
+        const checkpoint = `checkpoint-${Date.now()}`
+        setLatestCheckpoint(checkpoint)
+        content = `CHECKPOINT SAVED · ${checkpoint}`
+        break
+      }
+
+      case "restore-checkpoint": {
+        content = `CHECKPOINT RESTORE REQUESTED · ${latestCheckpoint}`
+        break
+      }
+
+      case "push-updates": {
+        content =
+          "GIT PUSH REQUESTED · human-controlled deployment"
+        break
+      }
+
+      case "health-check": {
+        content =
+          "SYSTEM HEALTH CHECK · Foundry Core operational"
+        break
+      }
+
+      case "export-continuity": {
+        content = "CONTINUITY EXPORT REQUESTED"
+        break
+      }
+
+      case "compact-runtime": {
+        content = "RUNTIME COMPACT REQUESTED"
+        break
+      }
+
+      case "generate-handoff": {
+        content = "HANDOFF GENERATION REQUESTED"
+        break
+      }
+
+      case "restart-runtime": {
+        content =
+          "RUNTIME RESTART REQUESTED · manual intervention required"
+        break
+      }
+
+      default: {
+        content = `COMMAND · ${command.label}`
+      }
     }
 
-    if (command.id === "push-updates") {
-      message =
-        "GIT PUSH COMPLETED"
-    }
-
-    if (command.id === "health-check") {
-      message =
-        "SYSTEM HEALTH OK"
-    }
-
-    appendEntry({
+    appendOperationalEvent({
       id: crypto.randomUUID(),
-
+      type: "system_event",
+      content,
       createdAt: new Date().toISOString(),
-
-      type: "system",
-
-      message,
     })
 
     closeCommandPalette()
   }
 
-  return {
-    executeCommand,
-  }
+  return { executeCommand }
 }
