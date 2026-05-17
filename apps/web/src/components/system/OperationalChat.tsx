@@ -33,9 +33,7 @@ export function OperationalChat() {
   const { loading, executePrompt } = useAiRuntime()
   const bottomRef     = useRef<HTMLDivElement | null>(null)
 
-  const [apiKey, setApiKey] = useState(() =>
-    typeof window !== "undefined" ? (localStorage.getItem("foundry-key") ?? "") : ""
-  )
+  const [apiKey, setApiKey] = useState(() => typeof window === "undefined" ? "" : (localStorage.getItem("foundry-key") ?? ""))
   const [showKey, setShowKey] = useState(false)
   const [input, setInput]     = useState("")
   const [prompt, setPrompt]   = useState("")
