@@ -3,90 +3,65 @@
 import { useInteraction } from "@/core/state/interaction-store"
 
 export function StatusRail() {
-  const { latestCheckpoint, operationalEvents } = useInteraction()
-
-  const eventCount = operationalEvents.length
+  const { operationalEvents } = useInteraction()
 
   return (
     <div
-      className="menubar-glass flex h-[38px] shrink-0 items-center justify-between border-b px-4"
-      style={{ borderColor: "var(--sep)" }}
+      className="flex h-9 shrink-0 items-center justify-between px-4"
+      style={{
+        background: "rgba(10,10,14,0.9)",
+        borderBottom: "1px solid var(--border-subtle)",
+        backdropFilter: "blur(12px)",
+      }}
     >
-      {/* Left — App identity */}
+      {/* Left */}
       <div className="flex items-center gap-3">
-        {/* App name */}
-        <div className="flex items-center gap-1.5">
-          <div
-            className="h-2.5 w-2.5 rounded-full dot-live"
-            style={{ background: "var(--green)" }}
-          />
-          <span
-            className="text-[13px] font-semibold tracking-tight"
-            style={{ color: "var(--label-1)" }}
-          >
-            Foundry
-          </span>
+        <div
+          className="text-[13px] font-semibold tracking-tight"
+          style={{ color: "var(--text-1)" }}
+        >
+          Foundry
         </div>
 
-        {/* Separator */}
-        <div className="h-3.5 w-px" style={{ background: "var(--sep)" }} />
+        <div
+          className="h-3.5 w-px"
+          style={{ background: "var(--border)" }}
+        />
 
-        {/* Branch */}
         <span
-          className="text-mono"
-          style={{ color: "var(--label-3)", fontSize: "11px" }}
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: "11px",
+            color: "var(--text-3)",
+          }}
         >
           feat/interaction-kernel
         </span>
-
-        {/* Separator */}
-        <div className="hidden h-3.5 w-px md:block" style={{ background: "var(--sep)" }} />
-
-        {/* Checkpoint */}
-        <div className="hidden items-center gap-1.5 md:flex">
-          <span style={{ color: "var(--label-4)", fontSize: "11px" }}>
-            checkpoint
-          </span>
-          <span
-            className="text-mono"
-            style={{ color: "var(--label-2)", fontSize: "11px" }}
-          >
-            {latestCheckpoint}
-          </span>
-        </div>
       </div>
 
-      {/* Right — Status + ⌘K */}
+      {/* Right */}
       <div className="flex items-center gap-3">
-        {/* Event count */}
-        <div className="hidden items-center gap-1.5 lg:flex">
+        <div className="flex items-center gap-1.5">
           <div
-            className="h-1.5 w-1.5 rounded-full"
-            style={{ background: "var(--label-4)" }}
-          />
-          <span style={{ color: "var(--label-3)", fontSize: "11px" }}>
-            {eventCount} events
-          </span>
-        </div>
-
-        {/* Status */}
-        <div className="hidden items-center gap-1.5 md:flex">
-          <div
-            className="h-1.5 w-1.5 rounded-full"
+            className="pulse h-1.5 w-1.5 rounded-full"
             style={{ background: "var(--green)" }}
           />
-          <span style={{ color: "var(--label-2)", fontSize: "11px" }}>
-            Operational
+          <span style={{ fontSize: "11px", color: "var(--text-3)" }}>
+            Operational · {operationalEvents.length} events
           </span>
         </div>
 
-        {/* Separator */}
-        <div className="h-3.5 w-px" style={{ background: "var(--sep)" }} />
+        <div
+          className="h-3.5 w-px"
+          style={{ background: "var(--border)" }}
+        />
 
-        {/* ⌘K hint */}
         <span
-          className="text-mono select-none"
-          style={{ color: "var(--label-3)", fontSize: "11px" }}
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: "11px",
+            color: "var(--text-3)",
+          }}
         >
           ⌘K
         </span>

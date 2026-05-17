@@ -9,244 +9,173 @@ import { StatusRail } from "@/components/system/StatusRail"
 import { useCommandRuntime } from "@/core/registry/use-command-runtime"
 import { InteractionProvider, useInteraction } from "@/core/state/interaction-store"
 import { useCommandPaletteKeyboard } from "@/hooks/useCommandPaletteKeyboard"
-import { useCommandActions } from "@/core/registry/command-actions"
-import type { CommandId } from "@/core/registry/command-types"
-import { commandRegistry } from "@/core/registry/command-registry"
 
-/* ── Nav items ── */
-const NAV_ITEMS: { label: string; id: string; active: boolean }[] = [
-  { label: "Operational Chat", id: "chat",        active: true  },
-  { label: "Runtime Context",  id: "context",     active: false },
-  { label: "Checkpoints",      id: "checkpoints", active: false },
-  { label: "Handoff Notes",    id: "handoff",     active: false },
-]
+/* ── Tab types ── */
+type Tab = "foundry" | "forge" | "apps"
 
-/* ── Sidebar action commands ── */
-const SIDEBAR_ACTIONS: { label: string; id: CommandId; symbol: string }[] = [
-  { label: "Save Checkpoint",   id: "save-checkpoint",  symbol: "↓" },
-  { label: "Push Updates",      id: "push-updates",     symbol: "↗" },
-  { label: "Health Check",      id: "health-check",     symbol: "◎" },
-  { label: "Export Continuity", id: "export-continuity",symbol: "⤴" },
-  { label: "Compact Runtime",   id: "compact-runtime",  symbol: "⊡" },
-  { label: "Generate Handoff",  id: "generate-handoff", symbol: "≡" },
-  { label: "Restart Runtime",   id: "restart-runtime",  symbol: "↺" },
-]
+/* ── Forge placeholder tab ── */
+function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
+  const [idea, setIdea] = useState("")
 
-/* ── Sidebar ── */
-function Sidebar({
-  collapsed,
-  onToggle,
-}: {
-  collapsed: boolean
-  onToggle: () => void
-}) {
-  const { latestCheckpoint } = useInteraction()
-  const { executeCommand }   = useCommandActions()
+  const templates = [
+    "Dashboard",
+    "Data Explorer",
+    "API Wrapper",
+    "Form Builder",
+    "Doc Generator",
+    "Analytics View",
+  ]
 
   return (
-    <aside
-      className="sidebar-glass flex shrink-0 flex-col"
-      style={{
-        width: collapsed ? "52px" : "200px",
-        transition: "width 220ms cubic-bezier(0.4, 0, 0.2, 1)",
-        borderRight: "1px solid var(--sep)",
-        overflow: "hidden",
-      }}
-    >
-      {/* Header */}
-      <div
-        className="flex h-[38px] shrink-0 items-center justify-between px-3"
-        style={{ borderBottom: "1px solid var(--sep)" }}
-      >
-        {!collapsed && (
-          <div className="flex items-center gap-2 min-w-0">
-            <div
-              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[10px] font-bold"
-              style={{
-                background: "linear-gradient(135deg, #0A84FF 0%, #34AADC 100%)",
-                color: "#fff",
-              }}
-            >
-              F
-            </div>
-            <div className="min-w-0">
-              <div
-                className="truncate font-semibold"
-                style={{ fontSize: "12px", color: "var(--label-1)" }}
-              >
-                Foundry
-              </div>
-            </div>
-          </div>
-        )}
+    <div className="forge-canvas flex h-full flex-col items-center justify-center px-6">
+      <div className="w-full max-w-xl">
 
-        <button
-          onClick={onToggle}
-          className="ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition"
-          style={{
-            color: "var(--label-3)",
-            fontSize: "13px",
-          }}
-          onMouseEnter={(e) =>
-            (e.currentTarget.style.background = "var(--bg-hover)")
-          }
-          onMouseLeave={(e) =>
-            (e.currentTarget.style.background = "transparent")
-          }
-        >
-          {collapsed ? "›" : "‹"}
-        </button>
-      </div>
-
-      {/* Body */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden py-2">
-
-        {/* Nav section */}
-        {!collapsed && (
+        {/* Header */}
+        <div className="mb-8 text-center">
           <div
-            className="mb-1 px-3 pt-1 text-label"
+            className="mb-2 inline-flex h-10 w-10 items-center justify-center rounded-2xl text-lg"
+            style={{ background: "rgba(167,139,250,0.15)", border: "1px solid rgba(167,139,250,0.25)" }}
           >
-            Workspace
+            ⚡
           </div>
-        )}
+          <h1 className="mt-3 text-xl font-semibold" style={{ color: "var(--text-1)" }}>
+            Forge
+          </h1>
+          <p className="mt-1.5" style={{ fontSize: "13px", color: "var(--text-3)" }}>
+            Describe an app and Foundry will build, deploy, and manage it for you.
+          </p>
+        </div>
 
-        <div className="space-y-px px-2">
-          {NAV_ITEMS.map((item) => (
+        {/* Build input */}
+        <div
+          className="overflow-hidden rounded-2xl"
+          style={{ background: "var(--bg-overlay)", border: "1px solid var(--border)" }}
+        >
+          <textarea
+            value={idea}
+            onChange={(e) => setIdea(e.target.value)}
+            placeholder="Describe the app you want to build…"
+            rows={4}
+            className="w-full resize-none bg-transparent px-4 pt-4 pb-2 outline-none"
+            style={{ fontSize: "14px", lineHeight: "1.6", fontFamily: "var(--font-ui)" }}
+          />
+
+          <div
+            className="flex items-center justify-between border-t px-4 py-3"
+            style={{ borderColor: "var(--border-subtle)" }}
+          >
+            <span style={{ fontSize: "12px", color: "var(--text-4)" }}>
+              The app will be git-versioned and VPS-deployed automatically.
+            </span>
             <button
-              key={item.id}
-              className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-none"
+              disabled={!idea.trim()}
+              className="rounded-lg px-4 py-1.5 text-[13px] font-medium"
               style={{
-                background: item.active ? "var(--bg-selected)" : "transparent",
-              }}
-              onMouseEnter={(e) => {
-                if (!item.active)
-                  e.currentTarget.style.background = "var(--bg-hover)"
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = item.active
-                  ? "var(--bg-selected)"
-                  : "transparent"
+                background: idea.trim() ? "rgba(167,139,250,0.15)" : "transparent",
+                border: `1px solid ${idea.trim() ? "rgba(167,139,250,0.3)" : "var(--border-subtle)"}`,
+                color: idea.trim() ? "var(--forge)" : "var(--text-4)",
+                cursor: idea.trim() ? "pointer" : "not-allowed",
               }}
             >
-              {/* Indicator dot */}
-              <div
-                className="h-1.5 w-1.5 shrink-0 rounded-full"
-                style={{
-                  background: item.active ? "var(--blue)" : "var(--label-4)",
-                  transition: "background 150ms",
-                }}
-              />
-              {!collapsed && (
-                <span
-                  style={{
-                    fontSize: "13px",
-                    color: item.active ? "var(--label-1)" : "var(--label-3)",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {item.label}
-                </span>
-              )}
+              Forge App →
             </button>
+          </div>
+        </div>
+
+        {/* Templates */}
+        <div className="mt-6">
+          <p style={{ fontSize: "11px", letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-4)", marginBottom: "10px" }}>
+            Quickstart templates
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {templates.map((t) => (
+              <button
+                key={t}
+                onClick={() => setIdea(`Build a ${t.toLowerCase()} app`)}
+                className="rounded-lg px-3 py-1.5 text-[12px] transition"
+                style={{
+                  background: "var(--bg-raised)",
+                  border: "1px solid var(--border)",
+                  color: "var(--text-2)",
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(167,139,250,0.3)"; (e.currentTarget as HTMLElement).style.color = "var(--forge)" }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; (e.currentTarget as HTMLElement).style.color = "var(--text-2)" }}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Recent — empty state */}
+        <div className="mt-8" style={{ borderTop: "1px solid var(--border-subtle)", paddingTop: "20px" }}>
+          <p style={{ fontSize: "11px", letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-4)", marginBottom: "10px" }}>
+            Forged apps
+          </p>
+          <button
+            onClick={onOpenApps}
+            className="flex w-full items-center justify-between rounded-xl px-4 py-3"
+            style={{ background: "var(--bg-raised)", border: "1px solid var(--border-subtle)", color: "var(--text-3)" }}
+          >
+            <span style={{ fontSize: "13px" }}>No apps forged yet</span>
+            <span style={{ fontSize: "12px", color: "var(--text-4)" }}>View all →</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ── Apps placeholder tab ── */
+function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center px-6">
+      <div className="w-full max-w-xl text-center">
+        <div
+          className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-2xl text-lg"
+          style={{ background: "rgba(255,255,255,0.05)", border: "1px solid var(--border)" }}
+        >
+          □
+        </div>
+        <h2 className="text-lg font-semibold" style={{ color: "var(--text-1)" }}>
+          Forged Apps
+        </h2>
+        <p className="mt-2" style={{ fontSize: "13px", color: "var(--text-3)", lineHeight: "1.6" }}>
+          Apps built with Forge live here. Each one is git-versioned,<br />
+          VPS-deployed, and fully managed by Foundry.
+        </p>
+        <button
+          onClick={onOpenForge}
+          className="mt-6 rounded-xl px-6 py-2.5 text-[13px] font-medium"
+          style={{
+            background: "rgba(167,139,250,0.12)",
+            border: "1px solid rgba(167,139,250,0.25)",
+            color: "var(--forge)",
+          }}
+        >
+          ⚡ Open Forge
+        </button>
+
+        <div
+          className="mt-8 rounded-2xl p-4 text-left"
+          style={{ background: "var(--bg-raised)", border: "1px solid var(--border-subtle)" }}
+        >
+          <p style={{ fontSize: "11px", letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-4)", marginBottom: "8px" }}>
+            How it works
+          </p>
+          {[
+            ["⚡ Forge", "Describe an app. Foundry AI builds it."],
+            ["□ Deploy",  "Auto-deployed to your VPS, git-tracked."],
+            ["◎ Manage", "Monitor, update, or retire from here."],
+          ].map(([icon, text]) => (
+            <div key={icon} className="flex items-start gap-3 py-1.5">
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--text-4)", marginTop: "1px", width: "60px", flexShrink: 0 }}>{icon}</span>
+              <span style={{ fontSize: "12px", color: "var(--text-2)" }}>{text}</span>
+            </div>
           ))}
         </div>
-
-        {/* Actions section */}
-        {!collapsed && (
-          <div
-            className="mb-1 mt-4 px-3 text-label"
-          >
-            Actions
-          </div>
-        )}
-
-        <div className="space-y-px px-2">
-          {SIDEBAR_ACTIONS.map(({ label, id, symbol }) => {
-            const cmd = commandRegistry.find((c) => c.id === id)
-            if (!cmd) return null
-
-            return (
-              <button
-                key={id}
-                onClick={() => executeCommand(cmd)}
-                className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left"
-                style={{ background: "transparent" }}
-                onMouseEnter={(e) =>
-                  (e.currentTarget.style.background = "var(--bg-hover)")
-                }
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.background = "transparent")
-                }
-              >
-                <span
-                  className="shrink-0 w-4 text-center"
-                  style={{
-                    fontSize: "12px",
-                    color: "var(--label-3)",
-                    fontFamily: "var(--font-ui)",
-                  }}
-                >
-                  {symbol}
-                </span>
-                {!collapsed && (
-                  <span
-                    className="flex-1 truncate"
-                    style={{ fontSize: "12px", color: "var(--label-3)" }}
-                  >
-                    {label}
-                  </span>
-                )}
-                {!collapsed && cmd.shortcut.length > 0 && (
-                  <span
-                    className="shrink-0 text-mono"
-                    style={{ fontSize: "10px", color: "var(--label-4)" }}
-                  >
-                    {cmd.shortcut.join("")}
-                  </span>
-                )}
-              </button>
-            )
-          })}
-        </div>
       </div>
-
-      {/* Checkpoint footer */}
-      {!collapsed && (
-        <div
-          className="shrink-0 p-2"
-          style={{ borderTop: "1px solid var(--sep-subtle)" }}
-        >
-          <div
-            className="rounded-lg p-2.5"
-            style={{
-              background: "rgba(48,209,88,0.06)",
-              border: "1px solid rgba(48,209,88,0.14)",
-            }}
-          >
-            <div
-              className="mb-0.5 flex items-center gap-1.5"
-            >
-              <div
-                className="h-1.5 w-1.5 rounded-full dot-live"
-                style={{ background: "var(--green)" }}
-              />
-              <span
-                className="text-label"
-                style={{ color: "rgba(48,209,88,0.65)" }}
-              >
-                Checkpoint
-              </span>
-            </div>
-            <div
-              className="truncate text-mono"
-              style={{ fontSize: "10px", color: "rgba(48,209,88,0.85)" }}
-            >
-              {latestCheckpoint}
-            </div>
-          </div>
-        </div>
-      )}
-    </aside>
+    </div>
   )
 }
 
@@ -256,93 +185,122 @@ function FoundryPage() {
   useCommandPaletteKeyboard()
 
   const { commandPaletteOpen, openCommandPalette } = useInteraction()
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [activeTab, setActiveTab] = useState<Tab>("foundry")
+  const [contextOpen, setContextOpen] = useState(true)
+
+  const tabs: { id: Tab; label: string; symbol: string }[] = [
+    { id: "foundry", label: "Foundry",  symbol: "●" },
+    { id: "forge",   label: "Forge",    symbol: "⚡" },
+    { id: "apps",    label: "Apps",     symbol: "□" },
+  ]
 
   return (
     <AppShell>
-      <div className="flex h-screen flex-col overflow-hidden" style={{ background: "var(--bg-app)" }}>
+      <div className="flex h-screen flex-col overflow-hidden">
 
-        {/* Menu bar */}
+        {/* Status bar */}
         <StatusRail />
 
-        {/* Body */}
-        <div className="flex flex-1 overflow-hidden">
+        {/* Tab bar */}
+        <div
+          className="flex h-10 shrink-0 items-center justify-between px-4"
+          style={{ background: "var(--bg-raised)", borderBottom: "1px solid var(--border-subtle)" }}
+        >
+          {/* Tabs */}
+          <div className="flex items-center gap-1">
+            {tabs.map(({ id, label, symbol }) => {
+              const active = activeTab === id
+              return (
+                <button
+                  key={id}
+                  onClick={() => setActiveTab(id)}
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] font-medium transition-none"
+                  style={{
+                    background: active ? "var(--bg-overlay)" : "transparent",
+                    border: active ? "1px solid var(--border)" : "1px solid transparent",
+                    color: active ? "var(--text-1)" : "var(--text-3)",
+                  }}
+                >
+                  <span style={{
+                    fontSize: id === "forge" ? "13px" : "9px",
+                    color: active
+                      ? id === "forge" ? "var(--forge)"
+                      : id === "apps" ? "var(--text-2)"
+                      : "var(--blue)"
+                      : "var(--text-4)",
+                  }}>
+                    {symbol}
+                  </span>
+                  {label}
+                </button>
+              )
+            })}
+          </div>
 
-          {/* Sidebar */}
-          <Sidebar
-            collapsed={sidebarCollapsed}
-            onToggle={() => setSidebarCollapsed((v) => !v)}
-          />
-
-          {/* Main content */}
-          <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-
-            {/* Section toolbar */}
-            <div
-              className="flex h-[38px] shrink-0 items-center justify-between px-4"
+          {/* Right controls */}
+          <div className="flex items-center gap-2">
+            {activeTab === "foundry" && (
+              <button
+                onClick={() => setContextOpen(v => !v)}
+                className="rounded-lg px-2.5 py-1.5 text-[12px]"
+                style={{
+                  background: contextOpen ? "var(--bg-overlay)" : "transparent",
+                  border: `1px solid ${contextOpen ? "var(--border)" : "transparent"}`,
+                  color: contextOpen ? "var(--text-2)" : "var(--text-4)",
+                }}
+              >
+                Context
+              </button>
+            )}
+            <button
+              onClick={openCommandPalette}
+              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5"
               style={{
-                borderBottom: "1px solid var(--sep)",
-                background: "rgba(255,255,255,0.016)",
+                background: "var(--bg-overlay)",
+                border: "1px solid var(--border-subtle)",
+                fontSize: "12px",
+                color: "var(--text-3)",
               }}
             >
-              <div>
-                <span
-                  className="font-semibold"
-                  style={{ fontSize: "13px", color: "var(--label-1)" }}
-                >
-                  Operational Chat
-                </span>
-                <span
-                  className="ml-2"
-                  style={{ fontSize: "11px", color: "var(--label-4)" }}
-                >
-                  AI-native development runtime
-                </span>
-              </div>
+              Commands
+              <kbd style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-4)" }}>⌘K</kbd>
+            </button>
+          </div>
+        </div>
 
-              {/* ⌘K button */}
-              <button
-                onClick={openCommandPalette}
-                className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 transition"
-                style={{
-                  background: "var(--bg-elevated)",
-                  border: "1px solid var(--sep-subtle)",
-                  fontSize: "12px",
-                  color: "var(--label-2)",
-                }}
-                onMouseEnter={(e) =>
-                  (e.currentTarget.style.background = "var(--bg-hover)")
-                }
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.background = "var(--bg-elevated)")
-                }
-              >
-                <span>Commands</span>
-                <kbd
-                  className="text-mono"
-                  style={{ fontSize: "11px", color: "var(--label-3)" }}
-                >
-                  ⌘K
-                </kbd>
-              </button>
-            </div>
+        {/* Content area */}
+        <div className="flex flex-1 overflow-hidden">
 
-            {/* Content panels */}
-            <div className="flex min-h-0 flex-1 overflow-hidden">
-              {/* Chat — primary */}
+          {/* Foundry tab */}
+          {activeTab === "foundry" && (
+            <>
               <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
                 <OperationalChat />
               </div>
+              {contextOpen && (
+                <div
+                  className="w-[220px] shrink-0 overflow-hidden"
+                  style={{ borderLeft: "1px solid var(--border-subtle)" }}
+                >
+                  <ContextPanel />
+                </div>
+              )}
+            </>
+          )}
 
-              {/* Context — inspector */}
-              <div
-                className="w-[230px] shrink-0 overflow-hidden"
-                style={{ borderLeft: "1px solid var(--sep)" }}
-              >
-                <ContextPanel />
-              </div>
+          {/* Forge tab */}
+          {activeTab === "forge" && (
+            <div className="flex-1 overflow-hidden">
+              <ForgeTab onOpenApps={() => setActiveTab("apps")} />
             </div>
-          </div>
+          )}
+
+          {/* Apps tab */}
+          {activeTab === "apps" && (
+            <div className="flex-1 overflow-hidden">
+              <AppsTab onOpenForge={() => setActiveTab("forge")} />
+            </div>
+          )}
         </div>
       </div>
 
@@ -351,7 +309,7 @@ function FoundryPage() {
   )
 }
 
-/* ── Root export ── */
+/* ── Export ── */
 export default function Page() {
   return (
     <InteractionProvider>

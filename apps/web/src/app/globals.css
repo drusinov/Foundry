@@ -1,48 +1,45 @@
 @import "tailwindcss";
 
-/* ─── Foundry Design System ─── */
-/* Apple-inspired: system fonts, vibrancy, precision */
+/* ── Foundry v2 Design System ── */
 
 :root {
-  /* Fonts */
-  --font-ui: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
-  --font-mono: ui-monospace, "SF Mono", Menlo, "Cascadia Code", monospace;
+  /* Fonts — Geist renders consistently everywhere */
+  --font-ui:   var(--font-geist),   -apple-system, "Helvetica Neue", sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, Menlo, monospace;
 
-  /* Backgrounds */
-  --bg-app:       #0A0A0C;
-  --bg-sidebar:   rgba(20, 20, 22, 0.92);
-  --bg-panel:     rgba(255, 255, 255, 0.032);
-  --bg-hover:     rgba(255, 255, 255, 0.058);
-  --bg-selected:  rgba(10, 132, 255, 0.14);
-  --bg-elevated:  rgba(255, 255, 255, 0.05);
+  /* Backgrounds — noticeably lighter than v1, not oppressive */
+  --bg-base:      #13131A;   /* Main canvas */
+  --bg-raised:    #1A1A24;   /* Panels, cards */
+  --bg-overlay:   #20202C;   /* Inputs, elevated surfaces */
+  --bg-hover:     rgba(255,255,255,0.06);
+  --bg-active:    rgba(255,255,255,0.09);
+  --bg-selected:  rgba(99,153,255,0.15);
 
-  /* Labels — Apple hierarchy */
-  --label-1: rgba(255, 255, 255, 0.88);
-  --label-2: rgba(235, 235, 245, 0.55);
-  --label-3: rgba(235, 235, 245, 0.28);
-  --label-4: rgba(235, 235, 245, 0.13);
+  /* Labels — clear 4-level hierarchy */
+  --text-1: #EEEEF2;                   /* Primary — near-white */
+  --text-2: rgba(238,238,242,0.65);    /* Secondary */
+  --text-3: rgba(238,238,242,0.38);    /* Tertiary */
+  --text-4: rgba(238,238,242,0.2);     /* Quaternary / disabled */
 
-  /* Separators */
-  --sep:        rgba(84, 84, 88, 0.48);
-  --sep-subtle: rgba(84, 84, 88, 0.24);
+  /* Borders */
+  --border:        rgba(255,255,255,0.1);
+  --border-subtle: rgba(255,255,255,0.06);
+  --border-strong: rgba(255,255,255,0.16);
 
-  /* System Colors — Apple palette */
-  --blue:   #0A84FF;
-  --green:  #30D158;
-  --orange: #FF9F0A;
-  --red:    #FF453A;
-  --purple: #BF5AF2;
-  --cyan:   #64D2FF;
-  --teal:   #40C8E0;
+  /* Accent system */
+  --blue:    #6399FF;   /* Softer than Apple blue — works on dark bg */
+  --green:   #4ADE80;
+  --orange:  #FB923C;
+  --red:     #F87171;
+  --purple:  #C084FC;
+  --cyan:    #67E8F9;
 
-  /* Semantic */
-  --accent: var(--blue);
+  /* Forge accent — distinct from Foundry blue */
+  --forge:   #A78BFA;   /* Violet — creative energy */
 }
 
-/* ─── Base ─── */
-*, *::before, *::after {
-  box-sizing: border-box;
-}
+/* ── Reset ── */
+*, *::before, *::after { box-sizing: border-box; }
 
 html, body, #__next {
   height: 100%;
@@ -53,85 +50,59 @@ body {
   margin: 0;
   font-family: var(--font-ui);
   font-size: 13px;
-  line-height: 1.45;
-  color: var(--label-1);
-  background-color: var(--bg-app);
-  /* Subtle ambient depth — like macOS desktop */
-  background-image:
-    radial-gradient(ellipse 900px 700px at 12% 35%, rgba(10, 132, 255, 0.035) 0%, transparent 100%),
-    radial-gradient(ellipse 700px 500px at 88% 75%, rgba(48, 209, 88, 0.022) 0%, transparent 100%);
+  line-height: 1.5;
+  color: var(--text-1);
+  background: var(--bg-base);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ─── Typography scale ─── */
-.text-label   { font-size: 11px; font-weight: 500; letter-spacing: 0.055em; text-transform: uppercase; color: var(--label-3); }
-.text-caption { font-size: 11px; color: var(--label-3); }
-.text-body    { font-size: 13px; color: var(--label-1); }
-.text-mono    { font-family: var(--font-mono); font-size: 11px; }
-
-/* ─── Scrollbar — macOS style ─── */
-::-webkit-scrollbar       { width: 5px; height: 5px; }
+/* ── Scrollbar ── */
+::-webkit-scrollbar       { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 100px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.22); }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 
-/* ─── Sidebar glass vibrancy ─── */
-.sidebar-glass {
-  background: var(--bg-sidebar);
-  backdrop-filter: blur(24px) saturate(1.8);
-  -webkit-backdrop-filter: blur(24px) saturate(1.8);
-}
-
-/* ─── Palette glass ─── */
-.palette-glass {
-  background: rgba(38, 38, 40, 0.94);
-  backdrop-filter: blur(48px) saturate(2);
-  -webkit-backdrop-filter: blur(48px) saturate(2);
-}
-
-/* ─── Menubar glass ─── */
-.menubar-glass {
-  background: rgba(14, 14, 16, 0.88);
-  backdrop-filter: blur(20px) saturate(1.6);
-  -webkit-backdrop-filter: blur(20px) saturate(1.6);
-}
-
-/* ─── Status dot — live pulse ─── */
-@keyframes pulse-live {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.45; }
-}
-.dot-live { animation: pulse-live 2.4s ease-in-out infinite; }
-
-/* ─── Event slide-in ─── */
-@keyframes event-in {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-.event-in { animation: event-in 0.18s ease forwards; }
-
-/* ─── Palette open ─── */
-@keyframes palette-open {
-  from { opacity: 0; transform: translateY(-8px) scale(0.97); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
-}
-.palette-open { animation: palette-open 0.15s ease forwards; }
-
-/* ─── Focus ring — Apple style ─── */
+/* ── Focus ── */
 :focus-visible {
   outline: 2px solid var(--blue);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: 5px;
 }
 
-/* ─── Selection ─── */
-::selection {
-  background: rgba(10, 132, 255, 0.35);
+/* ── Selection ── */
+::selection { background: rgba(99,153,255,0.28); }
+
+/* ── Animations ── */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+.pulse { animation: pulse-dot 2.2s ease-in-out infinite; }
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: fade-up 0.16s ease forwards; }
+
+@keyframes palette-in {
+  from { opacity: 0; transform: scale(0.97) translateY(-6px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.palette-in { animation: palette-in 0.14s ease forwards; }
+
+/* ── Forge canvas — subtle dot grid ── */
+.forge-canvas {
+  background-image: radial-gradient(
+    rgba(255,255,255,0.04) 1px,
+    transparent 1px
+  );
+  background-size: 24px 24px;
 }
 
-/* ─── Input reset ─── */
+/* ── Input reset ── */
 input, textarea {
   font-family: var(--font-ui);
-  font-size: 13px;
+  color: var(--text-1);
 }
