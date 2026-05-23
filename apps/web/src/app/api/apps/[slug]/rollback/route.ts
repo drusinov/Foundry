@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
-import path from "node:path"
+import { getSession } from "@/lib/auth"
 import fs from "node:fs"
+import path from "node:path"
 import { execSync } from "node:child_process"
 
 export const dynamic = "force-dynamic"
@@ -14,6 +15,16 @@ export async function POST(request: Request, context: RouteContext) {
   try {
     const { slug }   = await context.params
     const { commit } = await request.json()
+
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
+    try {
+      const registry = JSON.parse(fs.readFileSync('/opt/foundry/forged-apps.json', 'utf8'))
+      const app = registry.find((a: { slug: string; userId?: string }) => a.slug === slug)
+      if (app && app.userId && app.userId !== session.userId && session.role !== 'admin') {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+      }
+    } catch { /* allow */ }
 
     if (!commit) return NextResponse.json({ error: "commit hash required" }, { status: 400 })
 

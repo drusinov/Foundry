@@ -19,8 +19,7 @@ type ForgedApp = {
   id: string; name: string; slug: string; description: string; icon?: string
   status: "deploying" | "running" | "stopped" | "error"
   port: number; url: string; pm2Name: string; appDir: string
-  mode: "dev" | "production"; createdAt: string
-  cost?: number; userId?: string
+  mode: "dev" | "production"; createdAt: string; cost?: number; userId?: string
 }
 
 function readRegistry(): ForgedApp[] {
@@ -94,11 +93,13 @@ export async function POST(request: Request) {
   const url     = `https://drusinov.eu/apps/${slug}/`
 
   const session = await getSession()
-  const userId  = session?.userId
+  if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
+  const userId  = session.userId
 
   const newApp: ForgedApp = {
     id:          `app_${Date.now().toString(36)}`,
     name:        displayName ?? slug.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
+    userId,
     slug, description: description ?? "", icon: icon ?? "", cost: cost ?? 0,
     status:      "deploying", port, url, pm2Name, appDir,
     mode:        "dev", createdAt: new Date().toISOString(),

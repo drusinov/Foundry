@@ -48,9 +48,12 @@ function readExistingFiles(appDir: string): Record<string, string> {
 
 export async function POST(request: Request) {
   try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
+
     const { slug, description } = await request.json()
 
-    const session = await getSession()
+    
     const dbUser  = session ? await userDb.findById(session.userId) : null
     const anthropicKey = dbUser?.anthropic_key ?? ""
 
