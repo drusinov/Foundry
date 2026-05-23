@@ -209,6 +209,14 @@ export function OperationalChat() {
 
   // Session token totals
   const [sessionTokens, setSessionTokens] = useState({ input: 0, output: 0 })
+  // Copy button feedback per event
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+
+  function copyEvent(id: string, content: string) {
+    navigator.clipboard.writeText(content)
+    setCopiedId(id)
+    setTimeout(() => setCopiedId(null), 2000)
+  }
 
   useEffect(() => {
     const oa = localStorage.getItem("foundry-openai-key")
@@ -302,11 +310,11 @@ export function OperationalChat() {
               <div key={ev.id} className="fade-up group relative rounded-xl p-3.5" style={{ background: c.bg, border: `1px solid ${c.border}` }}>
                 {/* Copy button — appears on hover */}
                 <button
-                  onClick={() => navigator.clipboard.writeText(ev.content)}
+                  onClick={() => copyEvent(ev.id, ev.content)}
                   className="absolute right-2.5 top-2.5 opacity-0 group-hover:opacity-100 rounded-md px-2 py-1 transition-opacity"
-                  style={{ fontSize: "10px", color: "var(--text-4)", background: "var(--bg-overlay)", border: "1px solid var(--border-subtle)" }}
+                  style={{ fontSize: "10px", color: copiedId === ev.id ? "var(--green)" : "var(--text-4)", background: "var(--bg-overlay)", border: `1px solid ${copiedId === ev.id ? "rgba(74,222,128,0.3)" : "var(--border-subtle)"}`, transition: "color 150ms, border-color 150ms" }}
                 >
-                  Copy
+                  {copiedId === ev.id ? "Copied ✓" : "Copy"}
                 </button>
 
                 <div className="flex gap-3">

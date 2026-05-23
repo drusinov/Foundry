@@ -244,12 +244,16 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
   async function reforgeApp() {
     if (!editIdea.trim() || !editSlug) return
     setReforging(true); setReforgeError("")
-    const genRes = await fetch("/api/forge", {
+
+    // Use /api/forge/edit — reads existing files, only changes what's needed
+    const genRes = await fetch("/api/forge/edit", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ description: editIdea, anthropicKey }),
+      body: JSON.stringify({ slug: editSlug, description: editIdea, anthropicKey }),
     })
     const genData = await genRes.json()
-    if (!genRes.ok || genData.error) { setReforgeError(genData.error ?? "Generation failed"); setReforging(false); return }
+    if (!genRes.ok || genData.error) { setReforgeError(genData.error ?? "Edit failed"); setReforging(false); return }
+
+    // Apply only the changed files
     const updateRes = await fetch("/api/forge/update", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ slug: editSlug, files: genData.files }),
