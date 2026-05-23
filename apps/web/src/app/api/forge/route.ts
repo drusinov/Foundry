@@ -188,8 +188,9 @@ Rules:
       })
       if (iconRes.ok) {
         const iconData = await iconRes.json()
-        const svg = (iconData.content?.[0]?.text ?? "").trim()
-        if (svg.startsWith("<svg")) appIcon = svg
+        const svgRaw   = (iconData.content?.[0]?.text ?? "").trim()
+        const svgStart = svgRaw.indexOf("<svg")
+        if (svgStart !== -1) appIcon = svgRaw.slice(svgStart)
       }
     } catch { /* non-fatal */ }
 

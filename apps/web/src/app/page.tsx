@@ -332,6 +332,31 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
     fetch("/api/apps").then(r => r.json()).then(d => { setApps(Array.isArray(d) ? d : []); setLoading(false) }).catch(() => setLoading(false))
   }, [])
 
+  // Auto-generate icons for apps that don't have one yet
+  useEffect(() => {
+    if (!anthropicKey || apps.length === 0) return
+    const missing = apps.filter(a => !(a as AppWithMode).icon)
+    if (missing.length === 0) return
+    // Generate one at a time to avoid hammering the API
+    const generateNext = async (queue: typeof missing) => {
+      if (queue.length === 0) return
+      const [app, ...rest] = queue
+      try {
+        const res = await fetch(`/api/apps/${app.slug}/icon`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ anthropicKey }),
+        })
+        const data = await res.json()
+        if (data.icon) {
+          setApps(prev => prev.map(a => a.slug === app.slug ? { ...a, icon: data.icon } as AppWithMode : a))
+        }
+      } catch { /* non-fatal */ }
+      generateNext(rest)
+    }
+    generateNext(missing)
+  }, [apps.length, anthropicKey])
+
   async function fetchCommits(slug: string) {
     if (historySlug === slug) { setHistorySlug(null); return }
     setHistorySlug(slug)
