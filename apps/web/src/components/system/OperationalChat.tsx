@@ -445,109 +445,95 @@ export function OperationalChat() {
       {/* ── Input zone ── */}
       <div className="shrink-0 px-4 pb-4">
         <div className="mx-auto max-w-2xl">
-          <div className="rounded-2xl" style={{ background: "var(--bg-overlay)", border: "1px solid var(--border)" }}>
+          <div className="overflow-hidden rounded-2xl" style={{ background: "var(--bg-overlay)", border: "1px solid var(--border)" }}>
+
+            {/* Key panel — collapsible */}
+            {showKeys && (
+              <div className="flex items-center gap-3 border-b px-4 py-2.5" style={{ borderColor: "var(--border-subtle)", background: "rgba(255,255,255,0.015)" }}>
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: openaiKey ? "var(--green)" : "rgba(255,255,255,0.12)" }} />
+                  <input value={openaiKey} onChange={(e) => saveOpenaiKey(e.target.value)}
+                    placeholder="OpenAI key" type="password" autoComplete="off"
+                    className="min-w-0 flex-1 bg-transparent outline-none"
+                    style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-2)" }} />
+                </div>
+                <div className="h-3 w-px shrink-0" style={{ background: "var(--border-subtle)" }} />
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: anthropicKey ? "var(--forge)" : "rgba(255,255,255,0.12)" }} />
+                  <input value={anthropicKey} onChange={(e) => saveAnthropicKey(e.target.value)}
+                    placeholder="Anthropic key" type="password" autoComplete="off"
+                    className="min-w-0 flex-1 bg-transparent outline-none"
+                    style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-2)" }} />
+                </div>
+              </div>
+            )}
+
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={onKey}
               placeholder="Send operational request…"
               rows={2}
-              className="w-full resize-none bg-transparent px-4 pt-3 pb-1 outline-none"
+              className="w-full resize-none bg-transparent px-4 pt-3 pb-2 outline-none"
               style={{ fontSize: "14px", lineHeight: "1.6", fontFamily: "var(--font-ui)" }}
             />
 
-            <div className="border-t px-3 py-2.5" style={{ borderColor: "var(--border-subtle)" }}>
-              {/* Keys row */}
-              <div className="mb-2.5 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-                <div className="flex flex-1 items-center gap-2">
-                  <div className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: openaiKey ? "var(--green)" : "var(--border-strong)" }} />
-                  <input
-                    value={showKeys ? openaiKey : openaiKey ? "·".repeat(Math.min(openaiKey.length, 24)) : ""}
-                    onChange={(e) => saveOpenaiKey(e.target.value)}
-                    onFocus={(e) => { if (!showKeys) e.target.value = openaiKey }}
-                    placeholder="OpenAI key"
-                    className="min-w-0 flex-1 bg-transparent outline-none"
-                    style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-3)" }}
-                  />
-                </div>
-                <div className="hidden sm:block h-3 w-px shrink-0" style={{ background: "var(--border)" }} />
-                <div className="flex flex-1 items-center gap-2">
-                  <div className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: anthropicKey ? "var(--forge)" : "var(--border-strong)" }} />
-                  <input
-                    value={showKeys ? anthropicKey : anthropicKey ? "·".repeat(Math.min(anthropicKey.length, 24)) : ""}
-                    onChange={(e) => saveAnthropicKey(e.target.value)}
-                    onFocus={(e) => { if (!showKeys) e.target.value = anthropicKey }}
-                    placeholder="Anthropic key"
-                    className="min-w-0 flex-1 bg-transparent outline-none"
-                    style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-3)" }}
-                  />
-                </div>
-                <button onClick={() => setShowKeys(v => !v)} style={{ fontSize: "10px", color: "var(--text-4)", textTransform: "uppercase", letterSpacing: "0.06em", flexShrink: 0 }}>
-                  {showKeys ? "hide" : "show"}
-                </button>
-              </div>
+            {/* Compact bottom bar */}
+            <div className="flex items-center gap-2 border-t px-3 py-2" style={{ borderColor: "var(--border-subtle)" }}>
+              <button onClick={() => setShowKeys(v => !v)} className="flex shrink-0 items-center gap-1"
+                title={showKeys ? "Hide API keys" : "Configure API keys"}>
+                <span className="h-2 w-2 rounded-full" style={{ background: openaiKey ? "var(--green)" : "rgba(255,255,255,0.15)", transition: "background 200ms" }} />
+                <span className="h-2 w-2 rounded-full" style={{ background: anthropicKey ? "var(--forge)" : "rgba(255,255,255,0.15)", transition: "background 200ms" }} />
+              </button>
 
-              {/* Actions row */}
-              <div className="flex items-center justify-between">
-                {/* Pipeline + session tokens */}
-                <div className="flex items-center gap-3 flex-wrap">
-                  <div className="flex items-center gap-1.5">
-                    <span style={{ fontSize: "10px", color: "var(--text-4)" }}>pipeline:</span>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: openaiKey && anthropicKey ? "var(--forge)" : "var(--text-3)" }}>
-                      {pipelineHint}
-                    </span>
-                  </div>
-                  {/* Model selector — hidden on mobile */}
-                  <div className="hidden sm:flex items-center gap-1">
-                    {[
-                      { id: "claude-haiku-4-5-20251001", label: "Haiku" },
-                      { id: "claude-sonnet-4-6",         label: "Sonnet" },
-                      { id: "claude-opus-4-6",           label: "Opus" },
-                    ].map(({ id, label }) => (
-                      <button
-                        key={id}
-                        onClick={() => { setClaudeModel(id); localStorage.setItem("foundry-claude-model", id) }}
-                        className="rounded-md px-2 py-0.5 text-[10px]"
-                        style={{
-                          background: claudeModel === id ? "rgba(167,139,250,0.14)" : "transparent",
-                          border: `1px solid ${claudeModel === id ? "rgba(167,139,250,0.3)" : "var(--border-subtle)"}`,
-                          color: claudeModel === id ? "var(--forge)" : "var(--text-4)",
-                          cursor: "pointer",
-                        }}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                  {(sessionTokens.input > 0 || sessionTokens.output > 0) && (
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-4)" }}>
-                      ↑{fmtTokens(sessionTokens.input)} ↓{fmtTokens(sessionTokens.output)}
-                    </span>
-                  )}
-                </div>
+              <div className="h-3 w-px shrink-0" style={{ background: "var(--border)" }} />
 
-                <div className="flex items-center gap-2">
-                  {builtPrompt && (
-                    <button onClick={() => navigator.clipboard.writeText(builtPrompt)} className="rounded-lg px-3 py-1.5"
-                      style={{ background: "var(--bg-hover)", border: "1px solid var(--border-subtle)", fontSize: "12px", color: "var(--text-3)" }}>
-                      Copy prompt
-                    </button>
-                  )}
-                  <button onClick={send} disabled={loading || !input.trim()} className="rounded-lg px-4 py-1.5 font-medium"
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: openaiKey && anthropicKey ? "var(--text-3)" : "var(--text-4)" }}>
+                {pipelineHint}
+              </span>
+
+              {(sessionTokens.input > 0 || sessionTokens.output > 0) && (
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-4)" }}>
+                  · {fmtTokens(sessionTokens.input + sessionTokens.output)} tok
+                </span>
+              )}
+
+              <div className="ml-auto flex items-center gap-1">
+                {([
+                  { id: "claude-haiku-4-5-20251001", label: "H", title: "Haiku — fast" },
+                  { id: "claude-sonnet-4-6",         label: "S", title: "Sonnet — balanced" },
+                  { id: "claude-opus-4-6",           label: "O", title: "Opus — quality" },
+                ] as const).map(({ id, label, title }) => (
+                  <button key={id} title={title}
+                    onClick={() => { setClaudeModel(id); localStorage.setItem("foundry-claude-model", id) }}
                     style={{
-                      background: loading || !input.trim() ? "transparent" : "rgba(99,153,255,0.15)",
-                      border: `1px solid ${loading || !input.trim() ? "var(--border-subtle)" : "rgba(99,153,255,0.3)"}`,
-                      fontSize: "13px",
-                      color: loading || !input.trim() ? "var(--text-4)" : "var(--blue)",
-                      cursor: loading || !input.trim() ? "not-allowed" : "pointer",
+                      width: "22px", height: "22px", borderRadius: "6px", flexShrink: 0,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      background: claudeModel === id ? "rgba(167,139,250,0.18)" : "transparent",
+                      border: `1px solid ${claudeModel === id ? "rgba(167,139,250,0.4)" : "var(--border-subtle)"}`,
+                      color: claudeModel === id ? "var(--forge)" : "var(--text-4)",
+                      fontSize: "10px", fontWeight: 700, cursor: "pointer",
                     }}>
-                    {loading ? "Running…" : "Execute"}
+                    {label}
                   </button>
-                </div>
+                ))}
               </div>
+
+              <button onClick={send} disabled={loading || !input.trim()}
+                style={{
+                  height: "26px", paddingLeft: "10px", paddingRight: "10px",
+                  borderRadius: "8px", flexShrink: 0,
+                  background: !loading && input.trim() ? "rgba(99,153,255,0.12)" : "transparent",
+                  border: `1px solid ${!loading && input.trim() ? "rgba(99,153,255,0.28)" : "var(--border-subtle)"}`,
+                  fontSize: "12px", fontWeight: 500,
+                  color: !loading && input.trim() ? "var(--blue)" : "var(--text-4)",
+                  cursor: !loading && input.trim() ? "pointer" : "not-allowed",
+                }}>
+                {loading ? "…" : "Send ↵"}
+              </button>
             </div>
           </div>
-          <div className="mt-1.5 px-1 text-right" style={{ fontSize: "10px", color: "var(--text-4)" }}>⌘↵ to execute</div>
+          <div className="mt-1 text-right" style={{ fontSize: "10px", color: "var(--text-4)" }}>⌘↵</div>
         </div>
       </div>
     </div>
