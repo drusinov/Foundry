@@ -197,11 +197,16 @@ function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
 
 // ── Apps Tab ─────────────────────────────────────────────────────────────────
 
+type AppWithMode = ForgedApp & { mode?: "dev" | "production" }
+
 function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
-  const [apps, setApps]         = useState<ForgedApp[]>([])
-  const [loading, setLoading]   = useState(true)
-  const [editSlug, setEditSlug] = useState<string | null>(null)
-  const [editIdea, setEditIdea] = useState("")
+  const [apps, setApps]           = useState<AppWithMode[]>([])
+  const [loading, setLoading]     = useState(true)
+  const [editSlug, setEditSlug]   = useState<string | null>(null)
+  const [logsSlug, setLogsSlug]   = useState<string | null>(null)
+  const [logsText, setLogsText]   = useState<Record<string, string>>({})
+  const [buildingSlug, setBuildingSlug] = useState<string | null>(null)
+  const [editIdea, setEditIdea]   = useState("")
   const [reforging, setReforging] = useState(false)
   const [reforgeError, setReforgeError] = useState("")
   const [anthropicKey, setAnthropicKey] = useState("")
@@ -217,26 +222,40 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
     setApps(prev => prev.filter(a => a.slug !== slug))
   }
 
+  async function fetchLogs(slug: string) {
+    if (logsSlug === slug) { setLogsSlug(null); return }
+    setLogsSlug(slug)
+    setLogsText(prev => ({ ...prev, [slug]: "Loading logs…" }))
+    const res = await fetch(`/api/apps/${slug}/logs`)
+    const data = await res.json()
+    setLogsText(prev => ({ ...prev, [slug]: data.logs ?? "No logs available." }))
+  }
+
+  async function buildApp(slug: string) {
+    setBuildingSlug(slug)
+    const res = await fetch(`/api/apps/${slug}/build`, { method: "POST" })
+    const data = await res.json()
+    if (data.success) {
+      setApps(prev => prev.map(a => a.slug === slug ? { ...a, mode: "production" } : a))
+    }
+    setBuildingSlug(null)
+  }
+
   async function reforgeApp() {
     if (!editIdea.trim() || !editSlug) return
     setReforging(true); setReforgeError("")
-
-    // Generate new code
     const genRes = await fetch("/api/forge", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ description: editIdea, anthropicKey }),
     })
     const genData = await genRes.json()
     if (!genRes.ok || genData.error) { setReforgeError(genData.error ?? "Generation failed"); setReforging(false); return }
-
-    // Write to existing app
     const updateRes = await fetch("/api/forge/update", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ slug: editSlug, files: genData.files }),
     })
     const updateData = await updateRes.json()
     if (!updateRes.ok || updateData.error) { setReforgeError(updateData.error ?? "Update failed"); setReforging(false); return }
-
     setReforging(false); setEditSlug(null); setEditIdea("")
   }
 
@@ -267,21 +286,30 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
 
         <div className="space-y-3">
           {apps.map((app) => {
-            const statusColor = app.status === "running" ? "var(--green)" : app.status === "deploying" ? "var(--orange)" : app.status === "error" ? "var(--red)" : "var(--text-4)"
-            const isEditing = editSlug === app.slug
+            const statusColor   = app.status === "running" ? "var(--green)" : app.status === "deploying" ? "var(--orange)" : app.status === "error" ? "var(--red)" : "var(--text-4)"
+            const isEditing     = editSlug === app.slug
+            const isShowingLogs = logsSlug === app.slug
+            const isBuilding    = buildingSlug === app.slug
+            const isProduction  = app.mode === "production"
 
             return (
               <div key={app.id} className="overflow-hidden rounded-2xl" style={{ background: "var(--bg-raised)", border: "1px solid var(--border-subtle)" }}>
+                {/* Header */}
                 <div className="flex items-start justify-between p-4">
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <div className="h-1.5 w-1.5 rounded-full" style={{ background: statusColor }} />
                       <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-1)" }}>{app.name || app.slug}</span>
                       <span style={{ fontSize: "10px", color: "var(--text-4)", fontFamily: "var(--font-mono)" }}>{app.status}</span>
+                      {isProduction && (
+                        <span className="rounded px-1.5 py-0.5" style={{ fontSize: "9px", fontFamily: "var(--font-mono)", background: "rgba(74,222,128,0.1)", border: "1px solid rgba(74,222,128,0.2)", color: "var(--green)", letterSpacing: "0.06em" }}>
+                          PROD
+                        </span>
+                      )}
                     </div>
                     <p style={{ fontSize: "12px", color: "var(--text-3)", lineHeight: "1.4" }}>{app.description}</p>
                   </div>
-                  <div className="flex items-center gap-2 ml-4 shrink-0">
+                  <div className="flex items-center gap-1.5 ml-4 shrink-0 flex-wrap justify-end">
                     <a href={app.url} target="_blank" rel="noopener noreferrer" className="rounded-lg px-2.5 py-1.5 text-[11px]"
                       style={{ background: "var(--bg-overlay)", border: "1px solid var(--border-subtle)", color: "var(--text-2)" }}>
                       Open ↗
@@ -290,6 +318,11 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
                       className="rounded-lg px-2.5 py-1.5 text-[11px]"
                       style={{ background: isEditing ? "rgba(99,153,255,0.1)" : "var(--bg-overlay)", border: `1px solid ${isEditing ? "rgba(99,153,255,0.25)" : "var(--border-subtle)"}`, color: isEditing ? "var(--blue)" : "var(--text-2)" }}>
                       Edit
+                    </button>
+                    <button onClick={() => fetchLogs(app.slug)}
+                      className="rounded-lg px-2.5 py-1.5 text-[11px]"
+                      style={{ background: isShowingLogs ? "rgba(99,153,255,0.08)" : "var(--bg-overlay)", border: `1px solid ${isShowingLogs ? "rgba(99,153,255,0.2)" : "var(--border-subtle)"}`, color: isShowingLogs ? "var(--blue)" : "var(--text-2)" }}>
+                      Logs
                     </button>
                     <button onClick={() => deleteApp(app.slug)} className="rounded-lg px-2.5 py-1.5 text-[11px]"
                       style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.12)", color: "var(--red)" }}>
@@ -302,17 +335,15 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
                 {isEditing && (
                   <div className="border-t px-4 py-4" style={{ borderColor: "var(--border-subtle)", background: "rgba(99,153,255,0.03)" }}>
                     <p style={{ fontSize: "11px", color: "var(--text-3)", marginBottom: "10px" }}>
-                      Describe what you want the app to do — Claude will regenerate the code and restart the app automatically.
+                      Describe what you want the app to do — Claude regenerates the code and restarts automatically.
                     </p>
-                    <textarea value={editIdea} onChange={(e) => setEditIdea(e.target.value)} rows={3}
-                      placeholder="New description…" className="w-full resize-none rounded-xl bg-transparent px-3 py-2.5 outline-none"
+                    <textarea value={editIdea} onChange={(e) => setEditIdea(e.target.value)} rows={3} placeholder="New description…"
+                      className="w-full resize-none rounded-xl bg-transparent px-3 py-2.5 outline-none"
                       style={{ fontSize: "13px", fontFamily: "var(--font-ui)", color: "var(--text-1)", background: "var(--bg-overlay)", border: "1px solid var(--border)", lineHeight: "1.5" }} />
                     {reforgeError && <p style={{ fontSize: "11px", color: "var(--red)", marginTop: "6px" }}>{reforgeError}</p>}
                     <div className="mt-3 flex justify-end gap-2">
                       <button onClick={() => setEditSlug(null)} className="rounded-lg px-3 py-1.5 text-[12px]"
-                        style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)", color: "var(--text-3)" }}>
-                        Cancel
-                      </button>
+                        style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)", color: "var(--text-3)" }}>Cancel</button>
                       <button onClick={reforgeApp} disabled={reforging || !editIdea.trim()} className="rounded-lg px-4 py-1.5 text-[12px] font-medium"
                         style={{ background: "rgba(167,139,250,0.14)", border: "1px solid rgba(167,139,250,0.28)", color: reforging ? "var(--text-4)" : "var(--forge)", cursor: reforging ? "not-allowed" : "pointer" }}>
                         {reforging ? "Re-forging…" : "⚡ Re-forge"}
@@ -321,10 +352,33 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
                   </div>
                 )}
 
+                {/* Logs panel */}
+                {isShowingLogs && (
+                  <div className="border-t" style={{ borderColor: "var(--border-subtle)" }}>
+                    <div className="flex items-center justify-between px-4 py-2" style={{ background: "rgba(0,0,0,0.2)", borderBottom: "1px solid var(--border-subtle)" }}>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-4)" }}>PM2 · {app.pm2Name}</span>
+                      <button onClick={() => fetchLogs(app.slug)} style={{ fontSize: "10px", color: "var(--text-4)" }}>↺ refresh</button>
+                    </div>
+                    <pre className="max-h-56 overflow-y-auto px-4 py-3" style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: "11px", lineHeight: "1.6", color: "var(--text-2)", background: "rgba(0,0,0,0.3)", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+                      {logsText[app.slug] ?? "Loading…"}
+                    </pre>
+                  </div>
+                )}
+
+                {/* Footer */}
                 <div className="flex items-center gap-4 border-t px-4 py-2.5" style={{ borderColor: "var(--border-subtle)" }}>
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-4)" }}>:{app.port}</span>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-4)" }}>{app.pm2Name}</span>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-4)" }}>{isProduction ? "next start" : "next dev"}</span>
                   <span style={{ fontSize: "10px", color: "var(--text-4)", marginLeft: "auto" }}>{new Date(app.createdAt).toLocaleDateString()}</span>
+                  {!isProduction && (
+                    <button
+                      onClick={() => buildApp(app.slug)}
+                      disabled={isBuilding}
+                      className="rounded-md px-2.5 py-1 text-[10px] font-medium"
+                      style={{ background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.2)", color: isBuilding ? "var(--text-4)" : "var(--green)", cursor: isBuilding ? "not-allowed" : "pointer" }}>
+                      {isBuilding ? "Building…" : "Build → Prod"}
+                    </button>
+                  )}
                 </div>
               </div>
             )
