@@ -46,7 +46,7 @@ function uniqueSlug(base: string): string {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { description, anthropicKey } = body
+    const { description, name, anthropicKey } = body
 
     if (!description || typeof description !== "string") {
       return NextResponse.json({ error: "Description is required" }, { status: 400 })
@@ -55,7 +55,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Anthropic API key is required" }, { status: 400 })
     }
 
-    const slug = uniqueSlug(slugify(description))
+    // Use explicit name for slug if provided, otherwise derive from description
+    const slugBase = (name && typeof name === "string" && name.trim())
+      ? name.trim()
+      : description
+    const slug = uniqueSlug(slugify(slugBase))
 
     const userPrompt = `
 Generate a complete Next.js 14 app.

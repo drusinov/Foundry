@@ -362,6 +362,28 @@ export function OperationalChat() {
               </span>
             </div>
           )}
+          {/* Sticky copy last response */}
+          {(() => {
+            const lastResult = [...events].reverse().find(e => e.type === "result")
+            if (!lastResult) return null
+            return (
+              <div className="sticky bottom-2 flex justify-center mt-2">
+                <button
+                  onClick={() => copyEvent(lastResult.id, lastResult.content)}
+                  className="flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[11px] font-medium shadow-lg"
+                  style={{
+                    background: copiedId === lastResult.id ? "rgba(74,222,128,0.15)" : "var(--bg-overlay)",
+                    border: `1px solid ${copiedId === lastResult.id ? "rgba(74,222,128,0.3)" : "var(--border)"}`,
+                    color: copiedId === lastResult.id ? "var(--green)" : "var(--text-3)",
+                    backdropFilter: "blur(8px)",
+                    transition: "all 150ms",
+                  }}
+                >
+                  {copiedId === lastResult.id ? "✓ Copied" : "Copy last response"}
+                </button>
+              </div>
+            )
+          })()}
           <div ref={bottomRef} />
         </div>
       </div>
@@ -375,8 +397,8 @@ export function OperationalChat() {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={onKey}
               placeholder="Send operational request…"
-              rows={3}
-              className="w-full resize-none bg-transparent px-4 pt-4 pb-2 outline-none"
+              rows={2}
+              className="w-full resize-none bg-transparent px-4 pt-3 pb-1 outline-none"
               style={{ fontSize: "14px", lineHeight: "1.6", fontFamily: "var(--font-ui)" }}
             />
 

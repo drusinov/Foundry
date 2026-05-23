@@ -22,6 +22,7 @@ type ForgeStatus = "idle" | "generating" | "generated" | "deploying" | "live" | 
 // ── Forge Tab ────────────────────────────────────────────────────────────────
 
 function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
+  const [appName, setAppName]         = useState("")
   const [idea, setIdea]               = useState("")
   const [status, setStatus]           = useState<ForgeStatus>("idle")
   const [slug, setSlug]               = useState("")
@@ -46,7 +47,7 @@ function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
     setStatus("generating"); setError("")
     const res = await fetch("/api/forge", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ description: idea, anthropicKey }),
+      body: JSON.stringify({ description: idea, name: appName.trim() || undefined, anthropicKey }),
     })
     const data = await res.json()
     if (!res.ok || data.error) { setError(data.error ?? "Generation failed"); setStatus("error"); return }
@@ -64,7 +65,7 @@ function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
     setLiveUrl(data.url); setStatus("live")
   }
 
-  function reset() { setStatus("idle"); setIdea(""); setSlug(""); setFiles({}); setLiveUrl(""); setError("") }
+  function reset() { setStatus("idle"); setAppName(""); setIdea(""); setSlug(""); setFiles({}); setLiveUrl(""); setError("") }
 
   if (status === "idle") return (
     <div className="h-full overflow-y-auto">
@@ -76,8 +77,20 @@ function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
             <p className="mt-1.5" style={{ fontSize: "13px", color: "var(--text-3)", lineHeight: "1.6" }}>Describe an app. Foundry builds it, deploys it to your VPS, and manages it.</p>
           </div>
           <div className="overflow-hidden rounded-2xl" style={{ background: "var(--bg-overlay)", border: "1px solid var(--border)" }}>
-            <textarea value={idea} onChange={(e) => setIdea(e.target.value)} placeholder="Describe the app you want to build…" rows={4}
-              className="w-full resize-none bg-transparent px-4 pt-4 pb-2 outline-none" style={{ fontSize: "14px", lineHeight: "1.6", fontFamily: "var(--font-ui)" }} />
+            {/* App name */}
+            <div className="flex items-center gap-2 border-b px-4 py-3" style={{ borderColor: "var(--border-subtle)" }}>
+              <span style={{ fontSize: "11px", color: "var(--text-4)", whiteSpace: "nowrap" }}>App name</span>
+              <input
+                value={appName}
+                onChange={(e) => setAppName(e.target.value)}
+                placeholder="e.g. Pomodoro Timer"
+                className="flex-1 bg-transparent outline-none"
+                style={{ fontSize: "13px", fontFamily: "var(--font-ui)", color: "var(--text-1)" }}
+              />
+            </div>
+            {/* Prompt */}
+            <textarea value={idea} onChange={(e) => setIdea(e.target.value)} placeholder="Describe what the app should do…" rows={4}
+              className="w-full resize-none bg-transparent px-4 pt-3 pb-2 outline-none" style={{ fontSize: "14px", lineHeight: "1.6", fontFamily: "var(--font-ui)" }} />
             <div className="flex items-center justify-between border-t px-4 py-3" style={{ borderColor: "var(--border-subtle)" }}>
               <span style={{ fontSize: "12px", color: "var(--text-4)" }}>Git-versioned · VPS-deployed · managed by Foundry</span>
               <button onClick={forge} disabled={!idea.trim()} className="rounded-lg px-4 py-1.5 text-[13px] font-medium"
@@ -330,24 +343,33 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
                 {/* Header */}
                 <div className="flex items-start justify-between p-4">
                   <div className="min-w-0 flex-1">
+                    {/* Title row */}
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <div className="h-1.5 w-1.5 rounded-full" style={{ background: statusColor }} />
-                      <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-1)" }}>{app.name || app.slug}</span>
-                      <span style={{ fontSize: "10px", color: "var(--text-4)", fontFamily: "var(--font-mono)" }}>{app.status}</span>
+                      <div className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: statusColor }} />
+                      <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-1)" }}>
+                        {app.name || app.slug}
+                      </span>
                       {isProduction && (
                         <span className="rounded px-1.5 py-0.5" style={{ fontSize: "9px", fontFamily: "var(--font-mono)", background: "rgba(74,222,128,0.1)", border: "1px solid rgba(74,222,128,0.2)", color: "var(--green)", letterSpacing: "0.06em" }}>
                           PROD
                         </span>
                       )}
                     </div>
-                    <p style={{ fontSize: "12px", color: "var(--text-3)", lineHeight: "1.4" }}>{app.description}</p>
+                    {/* Description */}
+                    <p style={{ fontSize: "12px", color: "var(--text-2)", lineHeight: "1.5", marginBottom: "6px" }}>
+                      {app.description.length > 120 ? app.description.slice(0, 120) + "…" : app.description}
+                    </p>
+                    {/* Release date */}
+                    <p style={{ fontSize: "10px", color: "var(--text-4)", fontFamily: "var(--font-mono)" }}>
+                      Released {new Date(app.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                    </p>
                   </div>
                   <div className="flex items-center gap-1.5 ml-4 shrink-0 flex-wrap justify-end">
                     <a href={app.url} target="_blank" rel="noopener noreferrer" className="rounded-lg px-2.5 py-1.5 text-[11px]"
                       style={{ background: "var(--bg-overlay)", border: "1px solid var(--border-subtle)", color: "var(--text-2)" }}>
                       Open ↗
                     </a>
-                    <button onClick={() => { setEditSlug(isEditing ? null : app.slug); setEditIdea(app.description); setReforgeError("") }}
+                    <button onClick={() => { setEditSlug(isEditing ? null : app.slug); setEditIdea(""); setReforgeError("") }}
                       className="rounded-lg px-2.5 py-1.5 text-[11px]"
                       style={{ background: isEditing ? "rgba(99,153,255,0.1)" : "var(--bg-overlay)", border: `1px solid ${isEditing ? "rgba(99,153,255,0.25)" : "var(--border-subtle)"}`, color: isEditing ? "var(--blue)" : "var(--text-2)" }}>
                       Edit
@@ -467,16 +489,14 @@ function FoundryPage() {
   const [activeTab, setActiveTab] = useState<Tab>("runtime")
 
   const tabs: { id: Tab; label: string; symbol: string }[] = [
-    { id: "runtime", label: "Runtime", symbol: "●" },
-    { id: "forge",   label: "Forge",   symbol: "⚡" },
-    { id: "apps",    label: "Apps",    symbol: "□" },
+    { id: "runtime", label: "Foundry Runtime", symbol: "🔥" },
+    { id: "forge",   label: "Forge",           symbol: "⚒️" },
+    { id: "apps",    label: "Apps",            symbol: "⚔️" },
   ]
 
   return (
     <AppShell>
       <div className="flex h-screen flex-col overflow-hidden">
-        <StatusRail />
-
         {/* Tab bar — no ⌘K button, no context toggle */}
         <div className="flex h-10 shrink-0 items-center px-4 gap-1" style={{ background: "var(--bg-raised)", borderBottom: "1px solid var(--border-subtle)" }}>
           {tabs.map(({ id, label, symbol }) => {
@@ -486,7 +506,7 @@ function FoundryPage() {
               <button key={id} onClick={() => setActiveTab(id)}
                 className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-medium"
                 style={{ fontSize: "13px", background: active ? "var(--bg-overlay)" : "transparent", border: active ? "1px solid var(--border)" : "1px solid transparent", color: active ? "var(--text-1)" : "var(--text-3)" }}>
-                <span style={{ fontSize: id === "forge" ? "13px" : "8px", color: active ? accent : "var(--text-4)" }}>{symbol}</span>
+                <span style={{ fontSize: "15px" }}>{symbol}</span>
                 {label}
               </button>
             )
@@ -502,6 +522,7 @@ function FoundryPage() {
       </div>
 
       <CommandPalette open={commandPaletteOpen} />
+      <StatusRail />
     </AppShell>
   )
 }
