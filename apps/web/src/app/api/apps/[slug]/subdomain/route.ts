@@ -4,10 +4,11 @@ import { execSync } from "node:child_process"
 
 export const dynamic = "force-dynamic"
 
-const REGISTRY_PATH  = "/opt/foundry/forged-apps.json"
+const REGISTRY_PATH   = "/opt/foundry/forged-apps.json"
 const NGINX_APPS_FILE = "/etc/nginx/sites-available/forged-apps"
 const NGINX_APPS_LINK = "/etc/nginx/sites-enabled/forged-apps"
-const CERTBOT_EMAIL   = "admin@drusinov.eu"   // update if needed
+const CERTBOT_EMAIL   = "admin@drusinov.eu"
+const SERVER_IP       = "93.94.140.136"
 
 type RouteContext = { params: Promise<{ slug: string }> }
 
@@ -26,7 +27,29 @@ export async function POST(_: Request, context: RouteContext) {
     const subdomain = `${slug}.drusinov.eu`
     const port      = app.port
 
-    // 1 — Add nginx HTTP server block (certbot adds SSL)
+    // 1 — DNS check: verify subdomain resolves to this server
+    try {
+      const resolved = execSync(`dig +short ${subdomain} @8.8.8.8`, { timeout: 8000 })
+        .toString().trim().split("\n").find(l => l.match(/^\d+\.\d+\.\d+\.\d+$/))
+
+      if (!resolved) {
+        return NextResponse.json({
+          error: `DNS not configured yet. Add this record at your registrar:\n\n  *.drusinov.eu   A   ${SERVER_IP}\n\nThen wait a few minutes for DNS to propagate and try again.`,
+          dnsRequired: true,
+        }, { status: 400 })
+      }
+
+      if (resolved !== SERVER_IP) {
+        return NextResponse.json({
+          error: `${subdomain} resolves to ${resolved} instead of ${SERVER_IP}. Check your DNS wildcard record.`,
+          dnsRequired: true,
+        }, { status: 400 })
+      }
+    } catch {
+      // dig not available — continue and let certbot fail with a clear message
+    }
+
+    // 2 — Add nginx HTTP server block
     let existing = ""
     try { existing = fs.readFileSync(NGINX_APPS_FILE, "utf8") } catch { /* new file */ }
 
@@ -49,33 +72,25 @@ server {
 }
 `
       fs.writeFileSync(NGINX_APPS_FILE, existing + block)
-
-      // Symlink into sites-enabled
-      try {
-        execSync(`ln -sf ${NGINX_APPS_FILE} ${NGINX_APPS_LINK}`, { stdio: "pipe" })
-      } catch { /* already linked */ }
-
+      try { execSync(`ln -sf ${NGINX_APPS_FILE} ${NGINX_APPS_LINK}`, { stdio: "pipe" }) } catch {}
       execSync("nginx -t && systemctl reload nginx", { timeout: 10000 })
     }
 
-    // 2 — Run certbot for HTTPS (requires DNS A record to already exist)
+    // 3 — Certbot SSL
     execSync(
       `certbot --nginx -d ${subdomain} --non-interactive --agree-tos -m ${CERTBOT_EMAIL} --redirect`,
       { timeout: 90000, stdio: "pipe" },
     )
 
-    // 3 — Update registry
+    // 4 — Update registry
     const updated = apps.map(a =>
-      a.slug === slug
-        ? { ...a, subdomainUrl: `https://${subdomain}/` }
-        : a
+      a.slug === slug ? { ...a, subdomainUrl: `https://${subdomain}/` } : a
     )
     fs.writeFileSync(REGISTRY_PATH, JSON.stringify(updated, null, 2))
 
     return NextResponse.json({ success: true, subdomain, url: `https://${subdomain}/` })
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error)
-    console.error("[subdomain]", msg)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

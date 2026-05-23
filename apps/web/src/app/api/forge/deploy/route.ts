@@ -11,13 +11,11 @@ const NGINX_CONFIG  = "/etc/nginx/sites-available/dashboard"
 const BASE_PORT     = 4000
 
 const enc = new TextEncoder()
-
-function sse(data: Record<string, unknown>) {
-  return enc.encode(`data: ${JSON.stringify(data)}\n\n`)
-}
+const sse = (data: Record<string, unknown>) =>
+  enc.encode(`data: ${JSON.stringify(data)}\n\n`)
 
 type ForgedApp = {
-  id: string; name: string; slug: string; description: string
+  id: string; name: string; slug: string; description: string; icon?: string
   status: "deploying" | "running" | "stopped" | "error"
   port: number; url: string; pm2Name: string; appDir: string
   mode: "dev" | "production"; createdAt: string
@@ -26,8 +24,9 @@ type ForgedApp = {
 function readRegistry(): ForgedApp[] {
   try { return JSON.parse(fs.readFileSync(REGISTRY_PATH, "utf8")) } catch { return [] }
 }
-function writeRegistry(apps: ForgedApp[]) { fs.writeFileSync(REGISTRY_PATH, JSON.stringify(apps, null, 2)) }
-
+function writeRegistry(apps: ForgedApp[]) {
+  fs.writeFileSync(REGISTRY_PATH, JSON.stringify(apps, null, 2))
+}
 function nextPort(apps: ForgedApp[]) {
   return apps.length === 0 ? BASE_PORT : Math.max(...apps.map(a => a.port).filter(Boolean)) + 1
 }
@@ -60,15 +59,15 @@ function writeFiles(appDir: string, files: Record<string, string>) {
   }
 }
 
-async function runWithLog(
+async function runStreamed(
   cmd: string, args: string[], cwd: string, timeout: number,
   onLog: (line: string) => void,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const proc = spawn(cmd, args, { cwd, timeout })
-    proc.stdout.on("data", (d) => d.toString().split("\n").filter(Boolean).forEach(onLog))
-    proc.stderr.on("data", (d) => d.toString().split("\n").filter(Boolean).forEach(onLog))
-    proc.on("close", (code) => code === 0 ? resolve() : reject(new Error(`${cmd} exited with code ${code}`)))
+    proc.stdout.on("data", d => d.toString().split("\n").filter(Boolean).forEach(onLog))
+    proc.stderr.on("data", d => d.toString().split("\n").filter(Boolean).forEach(onLog))
+    proc.on("close", code => code === 0 ? resolve() : reject(new Error(`${cmd} exited ${code}`)))
     proc.on("error", reject)
   })
 }
@@ -77,8 +76,9 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null)
   if (!body) return NextResponse.json({ error: "Invalid body" }, { status: 400 })
 
-  const { slug, description, files } = body as {
-    slug: string; description: string; files: Record<string, string>
+  const { slug, description, files, icon } = body as {
+    slug: string; description: string
+    files: Record<string, string>; icon?: string
   }
 
   if (!slug || !files || Object.keys(files).length === 0) {
@@ -94,9 +94,9 @@ export async function POST(request: Request) {
   const newApp: ForgedApp = {
     id:          `app_${Date.now().toString(36)}`,
     name:        slug.replace(/-[a-z0-9]{4,}$/, "").replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
-    slug, description: description ?? "",
-    status: "deploying", port, url, pm2Name, appDir,
-    mode: "dev", createdAt: new Date().toISOString(),
+    slug, description: description ?? "", icon: icon ?? "",
+    status:      "deploying", port, url, pm2Name, appDir,
+    mode:        "production", createdAt: new Date().toISOString(),
   }
   apps.push(newApp)
   writeRegistry(apps)
@@ -124,26 +124,36 @@ export async function POST(request: Request) {
 
         // 3 — npm install (streamed)
         log("📦 Installing packages…")
-        await runWithLog("npm", ["install", "--prefer-offline"], appDir, 90000, log)
+        await runStreamed("npm", ["install", "--prefer-offline"], appDir, 90000, log)
         log("✓ Packages installed")
 
-        // 4 — Start with PM2
-        log("🚀 Starting app with PM2…")
+        // 4 — Production build (streamed)
+        log("🔨 Building for production…")
+        await runStreamed("npm", ["run", "build"], appDir, 180000, log)
+        log("✓ Production build complete")
+
+        // Commit build
+        try {
+          execSync("git add -A && git commit -m 'Production build'", { cwd: appDir, stdio: "pipe" })
+        } catch { /* non-fatal */ }
+
+        // 5 — Start with PM2 in production mode
+        log("🚀 Starting app in production mode…")
         execSync(
-          `pm2 start ./node_modules/.bin/next --name ${pm2Name} -- dev --port ${port}`,
+          `pm2 start ./node_modules/.bin/next --name ${pm2Name} -- start --port ${port}`,
           { cwd: appDir, timeout: 15000, stdio: "pipe" },
         )
         execSync("pm2 save", { timeout: 5000, stdio: "pipe" })
-        log(`✓ App started on port ${port}`)
+        log(`✓ App running on port ${port} (next start)`)
 
-        // 5 — nginx
+        // 6 — nginx
         log("🌐 Updating nginx routing…")
         addNginxLocation(slug, port)
-        log("✓ nginx updated and reloaded")
+        log("✓ nginx updated")
 
-        // 6 — Mark running
+        // 7 — Mark running
         const updated = readRegistry().map(a =>
-          a.slug === slug ? { ...a, status: "running" as const } : a
+          a.slug === slug ? { ...a, status: "running" as const, mode: "production" as const } : a
         )
         writeRegistry(updated)
 

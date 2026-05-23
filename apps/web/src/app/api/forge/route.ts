@@ -156,7 +156,39 @@ STRICT RULES:
       }
     } catch { /* non-fatal — use original description */ }
 
-    return NextResponse.json({ slug, files, description: appDescription })
+    // Generate SVG icon using Haiku
+    let appIcon = ""
+    try {
+      const iconRes = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type":      "application/json",
+          "x-api-key":         anthropicKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model:      "claude-haiku-4-5-20251001",
+          max_tokens: 800,
+          messages:   [{
+            role:    "user",
+            content: `Create a 100x100 SVG app icon for: "${appDescription}".
+Rules:
+- viewBox="0 0 100 100"
+- rect rx="20" as background with a bold gradient (use linearGradient)
+- One simple white/light icon shape or symbol in the center representing the app
+- No text
+- Return ONLY the SVG tag, nothing else`,
+          }],
+        }),
+      })
+      if (iconRes.ok) {
+        const iconData = await iconRes.json()
+        const svg = (iconData.content?.[0]?.text ?? "").trim()
+        if (svg.startsWith("<svg")) appIcon = svg
+      }
+    } catch { /* non-fatal */ }
+
+    return NextResponse.json({ slug, files, description: appDescription, icon: appIcon })
   } catch (error) {
     console.error("[forge]", error instanceof Error ? error.message : error)
     return NextResponse.json({ error: "Forge generation failed" }, { status: 500 })

@@ -296,7 +296,15 @@ function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
 
 // ── Apps Tab ─────────────────────────────────────────────────────────────────
 
-type AppWithMode = ForgedApp & { mode?: "dev" | "production" }
+type AppWithMode = ForgedApp & { mode?: "dev" | "production"; icon?: string; subdomainUrl?: string }
+
+// Deterministic gradient from slug string
+function slugGradient(slug: string) {
+  let h = 0
+  for (let i = 0; i < slug.length; i++) h = (h * 31 + slug.charCodeAt(i)) >>> 0
+  const a = h % 360, b = (a + 130) % 360
+  return `linear-gradient(135deg, hsl(${a},55%,22%), hsl(${b},60%,32%))`
+}
 
 function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
   const [apps, setApps]           = useState<AppWithMode[]>([])
@@ -465,55 +473,91 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
 
             return (
               <div key={app.id} className="overflow-hidden rounded-2xl" style={{ background: "var(--bg-raised)", border: "1px solid var(--border-subtle)" }}>
-                {/* Header */}
-                <div className="flex items-start justify-between p-4">
+                {/* App store style header */}
+                <div className="flex gap-3 p-4">
+                  {/* Icon */}
+                  <div className="h-16 w-16 shrink-0 overflow-hidden rounded-2xl" style={{ border: "1px solid var(--border-subtle)" }}>
+                    {(app as AppWithMode).icon ? (
+                      <div dangerouslySetInnerHTML={{ __html: (app as AppWithMode).icon! }}
+                        style={{ width: "100%", height: "100%", display: "block" }} />
+                    ) : (
+                      <div style={{ width: "100%", height: "100%", background: slugGradient(app.slug),
+                        display: "flex", alignItems: "center", justifyContent: "center", fontSize: "26px" }}>
+                        ⚡
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Info */}
                   <div className="min-w-0 flex-1">
-                    {/* Title row */}
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <div className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: statusColor }} />
-                      <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-1)" }}>
-                        {app.name || app.slug}
-                      </span>
-                      {isProduction && (
-                        <span className="rounded px-1.5 py-0.5" style={{ fontSize: "9px", fontFamily: "var(--font-mono)", background: "rgba(74,222,128,0.1)", border: "1px solid rgba(74,222,128,0.2)", color: "var(--green)", letterSpacing: "0.06em" }}>
-                          PROD
-                        </span>
-                      )}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                          <div className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: statusColor }} />
+                          <span style={{ fontSize: "15px", fontWeight: 700, color: "var(--text-1)", letterSpacing: "-0.01em" }}>
+                            {app.name || app.slug}
+                          </span>
+                          {isProduction && (
+                            <span className="rounded px-1.5 py-0.5" style={{ fontSize: "9px", fontFamily: "var(--font-mono)", background: "rgba(74,222,128,0.12)", border: "1px solid rgba(74,222,128,0.25)", color: "var(--green)", letterSpacing: "0.06em" }}>PROD</span>
+                          )}
+                        </div>
+                        <p style={{ fontSize: "12px", color: "var(--text-2)", lineHeight: "1.45" }}>
+                          {app.description.length > 90 ? app.description.slice(0, 90) + "…" : app.description}
+                        </p>
+                        <p style={{ fontSize: "10px", color: "var(--text-4)", fontFamily: "var(--font-mono)", marginTop: "4px" }}>
+                          Released {new Date(app.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                          {" · "}:{app.port}
+                        </p>
+                      </div>
+                      <a href={app.url} target="_blank" rel="noopener noreferrer"
+                        className="shrink-0 rounded-xl px-3 py-1.5 text-[12px] font-medium"
+                        style={{ background: "rgba(99,153,255,0.12)", border: "1px solid rgba(99,153,255,0.25)", color: "var(--blue)" }}>
+                        Open ↗
+                      </a>
                     </div>
-                    {/* Description */}
-                    <p style={{ fontSize: "12px", color: "var(--text-2)", lineHeight: "1.5", marginBottom: "6px" }}>
-                      {app.description.length > 120 ? app.description.slice(0, 120) + "…" : app.description}
-                    </p>
-                    {/* Release date */}
-                    <p style={{ fontSize: "10px", color: "var(--text-4)", fontFamily: "var(--font-mono)" }}>
-                      Released {new Date(app.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
-                    </p>
                   </div>
-                  <div className="flex items-center gap-1.5 ml-4 shrink-0 flex-wrap justify-end">
-                    <a href={app.url} target="_blank" rel="noopener noreferrer" className="rounded-lg px-2.5 py-1.5 text-[11px]"
-                      style={{ background: "var(--bg-overlay)", border: "1px solid var(--border-subtle)", color: "var(--text-2)" }}>
-                      Open ↗
+                </div>
+
+                {/* Action toolbar */}
+                <div className="flex items-center gap-1 border-t px-3 py-2 flex-wrap" style={{ borderColor: "var(--border-subtle)", background: "rgba(255,255,255,0.015)" }}>
+                  {[
+                    { label: "Edit",    active: isEditing,             onClick: () => { setEditSlug(isEditing ? null : app.slug); setEditIdea(""); setReforgeError("") } },
+                    { label: "Logs",    active: isShowingLogs,         onClick: () => fetchLogs(app.slug) },
+                    { label: "History", active: historySlug===app.slug, onClick: () => fetchCommits(app.slug) },
+                  ].map(({ label, active, onClick }) => (
+                    <button key={label} onClick={onClick}
+                      className="rounded-lg px-2.5 py-1 text-[11px]"
+                      style={{ background: active ? "rgba(99,153,255,0.1)" : "transparent", border: `1px solid ${active ? "rgba(99,153,255,0.25)" : "transparent"}`, color: active ? "var(--blue)" : "var(--text-3)", cursor: "pointer" }}>
+                      {label}
+                    </button>
+                  ))}
+                  <div style={{ flex: 1 }} />
+                  {!(app as AppWithMode).subdomainUrl && (
+                    <button onClick={() => enableSubdomain(app.slug)} disabled={subdomainStatus[app.slug] === "loading"}
+                      className="rounded-lg px-2.5 py-1 text-[11px]"
+                      style={{ background: "transparent", border: "1px solid transparent", color: subdomainStatus[app.slug] === "error" ? "var(--red)" : "var(--text-4)", cursor: "pointer" }}
+                      title="Requires *.drusinov.eu DNS wildcard">
+                      {subdomainStatus[app.slug] === "loading" ? "Enabling…" : subdomainStatus[app.slug] === "error" ? "DNS not ready" : "↗ Subdomain"}
+                    </button>
+                  )}
+                  {(app as AppWithMode).subdomainUrl && (
+                    <a href={(app as AppWithMode).subdomainUrl} target="_blank" rel="noopener noreferrer"
+                      style={{ fontSize: "10px", color: "var(--cyan)", fontFamily: "var(--font-mono)" }}>
+                      {(app as AppWithMode).subdomainUrl}
                     </a>
-                    <button onClick={() => { setEditSlug(isEditing ? null : app.slug); setEditIdea(""); setReforgeError("") }}
-                      className="rounded-lg px-2.5 py-1.5 text-[11px]"
-                      style={{ background: isEditing ? "rgba(99,153,255,0.1)" : "var(--bg-overlay)", border: `1px solid ${isEditing ? "rgba(99,153,255,0.25)" : "var(--border-subtle)"}`, color: isEditing ? "var(--blue)" : "var(--text-2)" }}>
-                      Edit
+                  )}
+                  {!isProduction && (
+                    <button onClick={() => buildApp(app.slug)} disabled={isBuilding}
+                      className="rounded-lg px-2.5 py-1 text-[11px] font-medium"
+                      style={{ background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.2)", color: isBuilding ? "var(--text-4)" : "var(--green)", cursor: isBuilding ? "not-allowed" : "pointer" }}>
+                      {isBuilding ? "Building…" : "Build → Prod"}
                     </button>
-                    <button onClick={() => fetchLogs(app.slug)}
-                      className="rounded-lg px-2.5 py-1.5 text-[11px]"
-                      style={{ background: isShowingLogs ? "rgba(99,153,255,0.08)" : "var(--bg-overlay)", border: `1px solid ${isShowingLogs ? "rgba(99,153,255,0.2)" : "var(--border-subtle)"}`, color: isShowingLogs ? "var(--blue)" : "var(--text-2)" }}>
-                      Logs
-                    </button>
-                    <button onClick={() => fetchCommits(app.slug)}
-                      className="rounded-lg px-2.5 py-1.5 text-[11px]"
-                      style={{ background: historySlug === app.slug ? "rgba(99,153,255,0.08)" : "var(--bg-overlay)", border: `1px solid ${historySlug === app.slug ? "rgba(99,153,255,0.2)" : "var(--border-subtle)"}`, color: historySlug === app.slug ? "var(--blue)" : "var(--text-2)" }}>
-                      History
-                    </button>
-                    <button onClick={() => deleteApp(app.slug)} className="rounded-lg px-2.5 py-1.5 text-[11px]"
-                      style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.12)", color: "var(--red)" }}>
-                      Remove
-                    </button>
-                  </div>
+                  )}
+                  <button onClick={() => deleteApp(app.slug)}
+                    className="rounded-lg px-2.5 py-1 text-[11px]"
+                    style={{ background: "transparent", border: "1px solid transparent", color: "var(--red)", cursor: "pointer" }}>
+                    Remove
+                  </button>
                 </div>
 
                 {/* Edit panel */}
