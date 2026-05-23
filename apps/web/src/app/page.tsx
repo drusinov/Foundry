@@ -315,6 +315,7 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
   const [historySlug, setHistorySlug]       = useState<string | null>(null)
   const [commits, setCommits]               = useState<Record<string, { hash: string; short: string; message: string; date: string }[]>>({})
   const [rollingBack, setRollingBack]       = useState<string | null>(null)
+  const [togglingSlug, setTogglingSlug]     = useState<string | null>(null)
   const [editIdea, setEditIdea]   = useState("")
   const [reforging, setReforging] = useState(false)
   const [reforgeError, setReforgeError] = useState("")
@@ -350,6 +351,22 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
     setCommits(prev => ({ ...prev, [slug]: [] })) // force refetch
   }
 
+
+  async function startApp(slug: string) {
+    setTogglingSlug(slug)
+    const res = await fetch(`/api/apps/${slug}/start`, { method: "POST" })
+    const data = await res.json()
+    if (data.success) setApps(prev => prev.map(a => a.slug === slug ? { ...a, status: "running" as const } : a))
+    setTogglingSlug(null)
+  }
+
+  async function stopApp(slug: string) {
+    setTogglingSlug(slug)
+    const res = await fetch(`/api/apps/${slug}/stop`, { method: "POST" })
+    const data = await res.json()
+    if (data.success) setApps(prev => prev.map(a => a.slug === slug ? { ...a, status: "stopped" as const } : a))
+    setTogglingSlug(null)
+  }
 
   async function deleteApp(slug: string) {
     await fetch("/api/apps", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slug }) })
@@ -485,23 +502,46 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
                           {" · "}:{app.port}
                         </p>
                       </div>
-                      <a href={app.url} target="_blank" rel="noopener noreferrer"
-                        className="shrink-0 rounded-xl px-3 py-1.5 text-[12px] font-medium"
-                        style={{ background: "rgba(99,153,255,0.12)", border: "1px solid rgba(99,153,255,0.25)", color: "var(--blue)" }}>
-                        Open ↗
-                      </a>
+                      {app.status === "running" ? (
+                        <a href={app.url} target="_blank" rel="noopener noreferrer"
+                          className="shrink-0 rounded-xl px-3 py-1.5 text-[12px] font-medium"
+                          style={{ background: "rgba(99,153,255,0.12)", border: "1px solid rgba(99,153,255,0.25)", color: "var(--blue)" }}>
+                          Open ↗
+                        </a>
+                      ) : (
+                        <span className="shrink-0 rounded-xl px-3 py-1.5 text-[12px]"
+                          style={{ background: "var(--bg-overlay)", border: "1px solid var(--border-subtle)", color: "var(--text-4)" }}>
+                          Stopped
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
 
-                {/* Action bar — just Edit and Remove */}
+                {/* Action bar */}
                 <div className="flex items-center justify-between border-t px-4 py-2" style={{ borderColor: "var(--border-subtle)", background: "rgba(255,255,255,0.015)" }}>
-                  <button
-                    onClick={() => { setEditSlug(isEditing ? null : app.slug); setEditIdea(""); setReforgeError(""); setLogsSlug(null); setHistorySlug(null) }}
-                    className="rounded-lg px-3 py-1.5 text-[12px] font-medium"
-                    style={{ background: isEditing ? "rgba(99,153,255,0.1)" : "transparent", border: `1px solid ${isEditing ? "rgba(99,153,255,0.25)" : "transparent"}`, color: isEditing ? "var(--blue)" : "var(--text-3)", cursor: "pointer" }}>
-                    {isEditing ? "Close ✕" : "Edit"}
-                  </button>
+                  <div className="flex items-center gap-1">
+                    {/* Start / Stop toggle */}
+                    {app.status === "running" ? (
+                      <button onClick={() => stopApp(app.slug)} disabled={togglingSlug === app.slug}
+                        className="rounded-lg px-3 py-1.5 text-[12px] font-medium"
+                        style={{ background: "rgba(251,146,60,0.08)", border: "1px solid rgba(251,146,60,0.2)", color: togglingSlug === app.slug ? "var(--text-4)" : "var(--orange)", cursor: togglingSlug === app.slug ? "not-allowed" : "pointer" }}>
+                        {togglingSlug === app.slug ? "Stopping…" : "■ Stop"}
+                      </button>
+                    ) : (
+                      <button onClick={() => startApp(app.slug)} disabled={togglingSlug === app.slug}
+                        className="rounded-lg px-3 py-1.5 text-[12px] font-medium"
+                        style={{ background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.2)", color: togglingSlug === app.slug ? "var(--text-4)" : "var(--green)", cursor: togglingSlug === app.slug ? "not-allowed" : "pointer" }}>
+                        {togglingSlug === app.slug ? "Starting…" : "▶ Start"}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => { setEditSlug(isEditing ? null : app.slug); setEditIdea(""); setReforgeError(""); setLogsSlug(null); setHistorySlug(null) }}
+                      className="rounded-lg px-3 py-1.5 text-[12px]"
+                      style={{ background: isEditing ? "rgba(99,153,255,0.1)" : "transparent", border: `1px solid ${isEditing ? "rgba(99,153,255,0.25)" : "transparent"}`, color: isEditing ? "var(--blue)" : "var(--text-3)", cursor: "pointer" }}>
+                      {isEditing ? "Close ✕" : "Edit"}
+                    </button>
+                  </div>
                   <button onClick={() => deleteApp(app.slug)}
                     className="rounded-lg px-3 py-1.5 text-[12px]"
                     style={{ background: "transparent", color: "var(--red)", cursor: "pointer", border: "1px solid transparent" }}>
