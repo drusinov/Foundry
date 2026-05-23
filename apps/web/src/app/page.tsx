@@ -278,17 +278,13 @@ function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
 
   // Idle state
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="min-h-full flex flex-col items-center justify-start px-6 py-12">
-        <div className="w-full max-w-xl">
-          <div className="mb-8 text-center">
-            <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-2xl text-lg"
-              style={{ background: "rgba(167,139,250,0.15)", border: "1px solid rgba(167,139,250,0.25)" }}>⚡</div>
-            <h1 className="mt-3 text-xl font-semibold" style={{ color: "var(--text-1)" }}>Forge</h1>
-            <p className="mt-1.5" style={{ fontSize: "13px", color: "var(--text-3)", lineHeight: "1.6" }}>
-              Describe an app. Foundry builds it, deploys it to your VPS, and manages it.
-            </p>
-          </div>
+    <div className="h-full overflow-y-auto px-6 py-6">
+      <div className="mx-auto max-w-xl">
+        <div className="mb-5 flex items-center justify-between">
+          <h2 style={{ fontSize: "15px", fontWeight: 600, color: "var(--text-1)" }}>New App</h2>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-4)" }}>git-tracked · vps-deployed</span>
+        </div>
+        <div>
 
           <div className="overflow-hidden rounded-2xl" style={{ background: "var(--bg-overlay)", border: "1px solid var(--border)" }}>
             {/* App name */}
@@ -334,7 +330,7 @@ function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
                   style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-4)" }}>
                   Anthropic ↗
                 </a>
-                <button onClick={fetchBalance} style={{ fontSize: "10px", color: "var(--text-4)", marginLeft: "auto" }}>↺</button>
+                <button onClick={fetchBalance} style={{ fontSize: "10px", color: "var(--text-4)", marginLeft: "auto" }}>refresh</button>
               </div>
             )}
           </div>

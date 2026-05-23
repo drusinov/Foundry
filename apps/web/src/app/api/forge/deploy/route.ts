@@ -93,7 +93,7 @@ export async function POST(request: Request) {
 
   const newApp: ForgedApp = {
     id:          `app_${Date.now().toString(36)}`,
-    name:        slug.replace(/-[a-z0-9]{4,}$/, "").replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
+    name:        slug.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
     slug, description: description ?? "", icon: icon ?? "", cost: cost ?? 0,
     status:      "deploying", port, url, pm2Name, appDir,
     mode:        "dev", createdAt: new Date().toISOString(),
