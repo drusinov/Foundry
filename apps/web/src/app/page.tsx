@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { AppShell } from "@/components/layout/AppShell"
 import { CommandPalette } from "@/components/command/CommandPalette"
 import { OperationalChat } from "@/components/system/OperationalChat"
@@ -31,6 +31,8 @@ function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
   const [error, setError]             = useState("")
   const [anthropicKey, setAnthropicKey] = useState("")
   const [deployLogs, setDeployLogs] = useState<string[]>([])
+  const [queue, setQueue]           = useState<{ id: string; appName: string; description: string }[]>([])
+  const activeJobRef                 = useRef(false)
 
   useEffect(() => {
     const k = localStorage.getItem("foundry-anthropic-key")
@@ -39,24 +41,45 @@ function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
 
   const templates = ["Dashboard with charts", "Markdown notes app", "Pomodoro timer", "URL shortener", "Personal kanban board", "JSON formatter tool"]
 
-  async function forge() {
-    if (!idea.trim() || !anthropicKey) {
-      setError(!anthropicKey ? "Anthropic key not set — add it in the Runtime tab." : "")
-      setStatus("error")
-      return
-    }
+  // Add current form to queue (or start immediately if idle)
+  function enqueue() {
+    if (!idea.trim()) return
+    if (!anthropicKey) { setError("Anthropic key not set — add it in the Runtime tab."); setStatus("error"); return }
+    const job = { id: crypto.randomUUID(), appName: appName.trim(), description: idea.trim() }
+    setQueue(prev => [...prev, job])
+    setAppName(""); setIdea("")
+    if (!activeJobRef.current) processQueue([...queue, job])
+  }
+
+  // Process queue sequentially
+  async function processQueue(currentQueue: { id: string; appName: string; description: string }[]) {
+    const job = currentQueue.find(j => true) // take first
+    if (!job) { activeJobRef.current = false; return }
+    activeJobRef.current = true
+
     setStatus("generating"); setError("")
     const res = await fetch("/api/forge", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ description: idea, name: appName.trim() || undefined, anthropicKey }),
+      body: JSON.stringify({ description: job.description, name: job.appName || undefined, anthropicKey }),
     })
     const data = await res.json()
-    if (!res.ok || data.error) { setError(data.error ?? "Generation failed"); setStatus("error"); return }
+
+    if (!res.ok || data.error) {
+      setError(data.error ?? "Generation failed"); setStatus("error")
+      setQueue(prev => { const rest = prev.slice(1); setTimeout(() => processQueue(rest), 0); return rest })
+      return
+    }
+
     setSlug(data.slug); setFiles(data.files)
-    // Store AI-generated description if available
     if (data.description) setIdea(data.description)
     setStatus("generated")
+    // Remove processed job from queue
+    setQueue(prev => prev.slice(1))
+    activeJobRef.current = false
   }
+
+  // Keep forge() as alias for backward compat in the form
+  const forge = enqueue
 
   async function deploy() {
     setStatus("deploying"); setDeployLogs([])
@@ -118,7 +141,7 @@ function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
               <span style={{ fontSize: "12px", color: "var(--text-4)" }}>Git-versioned · VPS-deployed · managed by Foundry</span>
               <button onClick={forge} disabled={!idea.trim()} className="rounded-lg px-4 py-1.5 text-[13px] font-medium"
                 style={{ background: idea.trim() ? "rgba(167,139,250,0.15)" : "transparent", border: `1px solid ${idea.trim() ? "rgba(167,139,250,0.3)" : "var(--border-subtle)"}`, color: idea.trim() ? "var(--forge)" : "var(--text-4)", cursor: idea.trim() ? "pointer" : "not-allowed" }}>
-                Forge App →
+                {queue.length > 0 ? `Queue (${queue.length + 1})` : "Forge App →"}
               </button>
             </div>
           </div>
@@ -135,7 +158,30 @@ function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
               ))}
             </div>
           </div>
-          <button onClick={onOpenApps} className="mt-8 flex w-full items-center justify-between rounded-xl px-4 py-3"
+          {/* Queue display */}
+          {queue.length > 0 && (
+            <div className="mt-4 rounded-xl overflow-hidden" style={{ border: "1px solid var(--border-subtle)" }}>
+              <div className="px-4 py-2.5" style={{ background: "rgba(255,255,255,0.03)", borderBottom: "1px solid var(--border-subtle)" }}>
+                <span style={{ fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-4)" }}>
+                  Queue — {queue.length} pending
+                </span>
+              </div>
+              <div style={{ background: "var(--bg-raised)" }}>
+                {queue.map((job, i) => (
+                  <div key={job.id} className="flex items-center justify-between px-4 py-2.5" style={{ borderBottom: i < queue.length - 1 ? "1px solid var(--border-subtle)" : "none" }}>
+                    <div>
+                      <span style={{ fontSize: "12px", color: "var(--text-2)" }}>{job.appName || job.description.slice(0, 40)}</span>
+                      {i === 0 && <span className="ml-2 rounded px-1.5 py-0.5" style={{ fontSize: "9px", background: "rgba(167,139,250,0.1)", border: "1px solid rgba(167,139,250,0.2)", color: "var(--forge)" }}>next up</span>}
+                    </div>
+                    <button onClick={() => setQueue(prev => prev.filter(j => j.id !== job.id))}
+                      style={{ fontSize: "11px", color: "var(--text-4)" }}>✕</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <button onClick={onOpenApps} className="mt-4 flex w-full items-center justify-between rounded-xl px-4 py-3"
             style={{ background: "var(--bg-raised)", border: "1px solid var(--border-subtle)" }}>
             <span style={{ fontSize: "13px", color: "var(--text-3)" }}>View forged apps</span>
             <span style={{ fontSize: "12px", color: "var(--text-4)" }}>Apps →</span>
@@ -258,7 +304,12 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
   const [editSlug, setEditSlug]   = useState<string | null>(null)
   const [logsSlug, setLogsSlug]   = useState<string | null>(null)
   const [logsText, setLogsText]   = useState<Record<string, string>>({})
-  const [buildingSlug, setBuildingSlug] = useState<string | null>(null)
+  const [buildingSlug, setBuildingSlug]     = useState<string | null>(null)
+  const [historySlug, setHistorySlug]       = useState<string | null>(null)
+  const [commits, setCommits]               = useState<Record<string, { hash: string; short: string; message: string; date: string }[]>>({})
+  const [rollingBack, setRollingBack]       = useState<string | null>(null)
+  const [subdomainSlug, setSubdomainSlug]   = useState<string | null>(null)
+  const [subdomainStatus, setSubdomainStatus] = useState<Record<string, "idle" | "loading" | "done" | "error">>({})
   const [editIdea, setEditIdea]   = useState("")
   const [reforging, setReforging] = useState(false)
   const [reforgeError, setReforgeError] = useState("")
@@ -266,12 +317,45 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
   const [reforgeProgress, setReforgeProgress] = useState(0)
   const [anthropicKey, setAnthropicKey] = useState("")
   const [deployLogs, setDeployLogs] = useState<string[]>([])
+  const [queue, setQueue]           = useState<{ id: string; appName: string; description: string }[]>([])
+  const activeJobRef                 = useRef(false)
 
   useEffect(() => {
     const k = localStorage.getItem("foundry-anthropic-key")
     if (k) setAnthropicKey(k)
     fetch("/api/apps").then(r => r.json()).then(d => { setApps(Array.isArray(d) ? d : []); setLoading(false) }).catch(() => setLoading(false))
   }, [])
+
+  async function fetchCommits(slug: string) {
+    if (historySlug === slug) { setHistorySlug(null); return }
+    setHistorySlug(slug)
+    if (commits[slug]) return // already loaded
+    const res = await fetch(`/api/apps/${slug}/commits`)
+    const data = await res.json()
+    setCommits(prev => ({ ...prev, [slug]: data.commits ?? [] }))
+  }
+
+  async function rollbackTo(slug: string, commit: string) {
+    setRollingBack(commit)
+    await fetch(`/api/apps/${slug}/rollback`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ commit }),
+    })
+    setRollingBack(null)
+    setCommits(prev => ({ ...prev, [slug]: [] })) // force refetch
+  }
+
+  async function enableSubdomain(slug: string) {
+    setSubdomainStatus(prev => ({ ...prev, [slug]: "loading" }))
+    const res = await fetch(`/api/apps/${slug}/subdomain`, { method: "POST" })
+    const data = await res.json()
+    if (data.success) {
+      setSubdomainStatus(prev => ({ ...prev, [slug]: "done" }))
+      setApps(prev => prev.map(a => a.slug === slug ? { ...a, subdomainUrl: data.url } : a))
+    } else {
+      setSubdomainStatus(prev => ({ ...prev, [slug]: "error" }))
+    }
+  }
 
   async function deleteApp(slug: string) {
     await fetch("/api/apps", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slug }) })
@@ -420,6 +504,11 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
                       style={{ background: isShowingLogs ? "rgba(99,153,255,0.08)" : "var(--bg-overlay)", border: `1px solid ${isShowingLogs ? "rgba(99,153,255,0.2)" : "var(--border-subtle)"}`, color: isShowingLogs ? "var(--blue)" : "var(--text-2)" }}>
                       Logs
                     </button>
+                    <button onClick={() => fetchCommits(app.slug)}
+                      className="rounded-lg px-2.5 py-1.5 text-[11px]"
+                      style={{ background: historySlug === app.slug ? "rgba(99,153,255,0.08)" : "var(--bg-overlay)", border: `1px solid ${historySlug === app.slug ? "rgba(99,153,255,0.2)" : "var(--border-subtle)"}`, color: historySlug === app.slug ? "var(--blue)" : "var(--text-2)" }}>
+                      History
+                    </button>
                     <button onClick={() => deleteApp(app.slug)} className="rounded-lg px-2.5 py-1.5 text-[11px]"
                       style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.12)", color: "var(--red)" }}>
                       Remove
@@ -496,20 +585,65 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
                   </div>
                 )}
 
+                {/* History panel */}
+                {historySlug === app.slug && (
+                  <div className="border-t" style={{ borderColor: "var(--border-subtle)" }}>
+                    <div className="flex items-center justify-between px-4 py-2" style={{ background: "rgba(0,0,0,0.2)", borderBottom: "1px solid var(--border-subtle)" }}>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-4)" }}>Git history</span>
+                      <button onClick={() => fetchCommits(app.slug)} style={{ fontSize: "10px", color: "var(--text-4)" }}>↺ refresh</button>
+                    </div>
+                    <div className="max-h-48 overflow-y-auto" style={{ background: "rgba(0,0,0,0.2)" }}>
+                      {(commits[app.slug] ?? []).length === 0 ? (
+                        <p className="px-4 py-3" style={{ fontSize: "11px", color: "var(--text-4)" }}>No commits found.</p>
+                      ) : (commits[app.slug] ?? []).map(commit => (
+                        <div key={commit.hash} className="flex items-center justify-between gap-2 px-4 py-2.5" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+                          <div className="min-w-0">
+                            <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--cyan)" }}>{commit.short}</span>
+                            <span style={{ fontSize: "11px", color: "var(--text-2)", marginLeft: "8px" }}>{commit.message}</span>
+                            <span style={{ fontSize: "10px", color: "var(--text-4)", marginLeft: "8px" }}>{commit.date}</span>
+                          </div>
+                          <button
+                            onClick={() => rollbackTo(app.slug, commit.hash)}
+                            disabled={rollingBack === commit.hash}
+                            className="shrink-0 rounded-md px-2.5 py-1 text-[10px]"
+                            style={{ background: "rgba(251,146,60,0.08)", border: "1px solid rgba(251,146,60,0.2)", color: rollingBack === commit.hash ? "var(--text-4)" : "var(--orange)", cursor: rollingBack === commit.hash ? "not-allowed" : "pointer" }}>
+                            {rollingBack === commit.hash ? "Restoring…" : "Restore"}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Footer */}
-                <div className="flex items-center gap-4 border-t px-4 py-2.5" style={{ borderColor: "var(--border-subtle)" }}>
+                <div className="flex items-center gap-2 flex-wrap border-t px-4 py-2.5" style={{ borderColor: "var(--border-subtle)" }}>
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-4)" }}>:{app.port}</span>
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-4)" }}>{isProduction ? "next start" : "next dev"}</span>
-                  <span style={{ fontSize: "10px", color: "var(--text-4)", marginLeft: "auto" }}>{new Date(app.createdAt).toLocaleDateString()}</span>
-                  {!isProduction && (
-                    <button
-                      onClick={() => buildApp(app.slug)}
-                      disabled={isBuilding}
-                      className="rounded-md px-2.5 py-1 text-[10px] font-medium"
-                      style={{ background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.2)", color: isBuilding ? "var(--text-4)" : "var(--green)", cursor: isBuilding ? "not-allowed" : "pointer" }}>
-                      {isBuilding ? "Building…" : "Build → Prod"}
-                    </button>
-                  )}
+                  <div style={{ marginLeft: "auto" }} className="flex items-center gap-2 flex-wrap">
+                    {!(app as AppWithMode & { subdomainUrl?: string }).subdomainUrl && (
+                      <button
+                        onClick={() => enableSubdomain(app.slug)}
+                        disabled={subdomainStatus[app.slug] === "loading"}
+                        className="rounded-md px-2.5 py-1 text-[10px]"
+                        style={{ background: "rgba(100,210,255,0.06)", border: "1px solid rgba(100,210,255,0.15)", color: subdomainStatus[app.slug] === "loading" ? "var(--text-4)" : "var(--cyan)", cursor: subdomainStatus[app.slug] === "loading" ? "not-allowed" : "pointer" }}
+                        title="Requires *.drusinov.eu DNS wildcard to be configured">
+                        {subdomainStatus[app.slug] === "loading" ? "Enabling…" : subdomainStatus[app.slug] === "error" ? "DNS not ready" : "Enable subdomain"}
+                      </button>
+                    )}
+                    {(app as AppWithMode & { subdomainUrl?: string }).subdomainUrl && (
+                      <a href={(app as AppWithMode & { subdomainUrl?: string }).subdomainUrl} target="_blank" rel="noopener noreferrer"
+                        style={{ fontSize: "10px", color: "var(--cyan)", fontFamily: "var(--font-mono)" }}>
+                        {(app as AppWithMode & { subdomainUrl?: string }).subdomainUrl}
+                      </a>
+                    )}
+                    {!isProduction && (
+                      <button onClick={() => buildApp(app.slug)} disabled={isBuilding}
+                        className="rounded-md px-2.5 py-1 text-[10px] font-medium"
+                        style={{ background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.2)", color: isBuilding ? "var(--text-4)" : "var(--green)", cursor: isBuilding ? "not-allowed" : "pointer" }}>
+                        {isBuilding ? "Building…" : "Build → Prod"}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             )
@@ -548,7 +682,7 @@ function FoundryPage() {
                 className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-medium"
                 style={{ fontSize: "13px", background: active ? "var(--bg-overlay)" : "transparent", border: active ? "1px solid var(--border)" : "1px solid transparent", color: active ? "var(--text-1)" : "var(--text-3)" }}>
                 <span style={{ fontSize: "15px" }}>{symbol}</span>
-                {label}
+                <span className="hidden sm:inline">{label}</span>
               </button>
             )
           })}

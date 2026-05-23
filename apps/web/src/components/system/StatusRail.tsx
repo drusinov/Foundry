@@ -35,7 +35,7 @@ export function StatusRail() {
             color: "var(--text-3)",
           }}
         >
-          feat/interaction-kernel
+          <span className="hidden sm:inline">feat/interaction-kernel</span>
         </span>
       </div>
 
@@ -47,7 +47,7 @@ export function StatusRail() {
             style={{ background: "var(--green)" }}
           />
           <span style={{ fontSize: "11px", color: "var(--text-3)" }}>
-            Operational · {operationalEvents.length} events
+            <span className="sm:hidden">● {operationalEvents.length}</span><span className="hidden sm:inline">Operational · {operationalEvents.length} events</span>
           </span>
         </div>
 

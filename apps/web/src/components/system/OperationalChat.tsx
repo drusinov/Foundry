@@ -458,7 +458,7 @@ export function OperationalChat() {
 
             <div className="border-t px-3 py-2.5" style={{ borderColor: "var(--border-subtle)" }}>
               {/* Keys row */}
-              <div className="mb-2.5 flex items-center gap-3">
+              <div className="mb-2.5 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
                 <div className="flex flex-1 items-center gap-2">
                   <div className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: openaiKey ? "var(--green)" : "var(--border-strong)" }} />
                   <input
@@ -470,7 +470,7 @@ export function OperationalChat() {
                     style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-3)" }}
                   />
                 </div>
-                <div className="h-3 w-px shrink-0" style={{ background: "var(--border)" }} />
+                <div className="hidden sm:block h-3 w-px shrink-0" style={{ background: "var(--border)" }} />
                 <div className="flex flex-1 items-center gap-2">
                   <div className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: anthropicKey ? "var(--forge)" : "var(--border-strong)" }} />
                   <input
@@ -497,8 +497,8 @@ export function OperationalChat() {
                       {pipelineHint}
                     </span>
                   </div>
-                  {/* Model selector */}
-                  <div className="flex items-center gap-1">
+                  {/* Model selector — hidden on mobile */}
+                  <div className="hidden sm:flex items-center gap-1">
                     {[
                       { id: "claude-haiku-4-5-20251001", label: "Haiku" },
                       { id: "claude-sonnet-4-6",         label: "Sonnet" },
