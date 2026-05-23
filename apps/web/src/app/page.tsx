@@ -209,6 +209,8 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
   const [editIdea, setEditIdea]   = useState("")
   const [reforging, setReforging] = useState(false)
   const [reforgeError, setReforgeError] = useState("")
+  const [reforgeStep, setReforgeStep] = useState("")
+  const [reforgeProgress, setReforgeProgress] = useState(0)
   const [anthropicKey, setAnthropicKey] = useState("")
 
   useEffect(() => {
@@ -243,24 +245,51 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
 
   async function reforgeApp() {
     if (!editIdea.trim() || !editSlug) return
-    setReforging(true); setReforgeError("")
+    setReforging(true); setReforgeError(""); setReforgeProgress(0)
 
-    // Use /api/forge/edit — reads existing files, only changes what's needed
-    const genRes = await fetch("/api/forge/edit", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ slug: editSlug, description: editIdea, anthropicKey }),
+    // Simulate progress stages — real steps take ~25s total
+    const steps = [
+      { label: "Reading existing code…",     progress: 8,  delay: 0 },
+      { label: "Claude is rewriting…",        progress: 25, delay: 1200 },
+      { label: "Generating changes…",         progress: 55, delay: 6000 },
+      { label: "Finalising output…",          progress: 78, delay: 14000 },
+      { label: "Writing files to VPS…",       progress: 88, delay: 20000 },
+      { label: "Restarting app…",             progress: 95, delay: 24000 },
+    ]
+    const timers: ReturnType<typeof setTimeout>[] = []
+    steps.forEach(({ label, progress, delay }) => {
+      timers.push(setTimeout(() => { setReforgeStep(label); setReforgeProgress(progress) }, delay))
     })
-    const genData = await genRes.json()
-    if (!genRes.ok || genData.error) { setReforgeError(genData.error ?? "Edit failed"); setReforging(false); return }
 
-    // Apply only the changed files
-    const updateRes = await fetch("/api/forge/update", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ slug: editSlug, files: genData.files }),
-    })
-    const updateData = await updateRes.json()
-    if (!updateRes.ok || updateData.error) { setReforgeError(updateData.error ?? "Update failed"); setReforging(false); return }
-    setReforging(false); setEditSlug(null); setEditIdea("")
+    try {
+      const genRes = await fetch("/api/forge/edit", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug: editSlug, description: editIdea, anthropicKey }),
+      })
+      const genData = await genRes.json()
+      if (!genRes.ok || genData.error) {
+        timers.forEach(clearTimeout)
+        setReforgeError(genData.error ?? "Edit failed"); setReforging(false); return
+      }
+
+      setReforgeStep("Applying changes…"); setReforgeProgress(88)
+
+      const updateRes = await fetch("/api/forge/update", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug: editSlug, files: genData.files }),
+      })
+      const updateData = await updateRes.json()
+      timers.forEach(clearTimeout)
+      if (!updateRes.ok || updateData.error) {
+        setReforgeError(updateData.error ?? "Update failed"); setReforging(false); return
+      }
+
+      setReforgeStep("Done"); setReforgeProgress(100)
+      setTimeout(() => { setReforging(false); setEditSlug(null); setEditIdea(""); setReforgeProgress(0); setReforgeStep("") }, 800)
+    } catch (err) {
+      timers.forEach(clearTimeout)
+      setReforgeError(String(err)); setReforging(false)
+    }
   }
 
   if (loading) return <div className="flex h-full items-center justify-center" style={{ fontSize: "13px", color: "var(--text-3)" }}>Loading apps…</div>
@@ -338,21 +367,56 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
                 {/* Edit panel */}
                 {isEditing && (
                   <div className="border-t px-4 py-4" style={{ borderColor: "var(--border-subtle)", background: "rgba(99,153,255,0.03)" }}>
-                    <p style={{ fontSize: "11px", color: "var(--text-3)", marginBottom: "10px" }}>
-                      Describe what you want the app to do — Claude regenerates the code and restarts automatically.
-                    </p>
-                    <textarea value={editIdea} onChange={(e) => setEditIdea(e.target.value)} rows={3} placeholder="New description…"
-                      className="w-full resize-none rounded-xl bg-transparent px-3 py-2.5 outline-none"
-                      style={{ fontSize: "13px", fontFamily: "var(--font-ui)", color: "var(--text-1)", background: "var(--bg-overlay)", border: "1px solid var(--border)", lineHeight: "1.5" }} />
-                    {reforgeError && <p style={{ fontSize: "11px", color: "var(--red)", marginTop: "6px" }}>{reforgeError}</p>}
-                    <div className="mt-3 flex justify-end gap-2">
-                      <button onClick={() => setEditSlug(null)} className="rounded-lg px-3 py-1.5 text-[12px]"
-                        style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)", color: "var(--text-3)" }}>Cancel</button>
-                      <button onClick={reforgeApp} disabled={reforging || !editIdea.trim()} className="rounded-lg px-4 py-1.5 text-[12px] font-medium"
-                        style={{ background: "rgba(167,139,250,0.14)", border: "1px solid rgba(167,139,250,0.28)", color: reforging ? "var(--text-4)" : "var(--forge)", cursor: reforging ? "not-allowed" : "pointer" }}>
-                        {reforging ? "Re-forging…" : "⚡ Re-forge"}
-                      </button>
-                    </div>
+                    {reforging ? (
+                      /* ── Progress view ── */
+                      <div className="py-2">
+                        <div className="mb-3 flex items-center justify-between">
+                          <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--forge)" }}>
+                            {reforgeProgress === 100 ? "✓ Done" : "⚡ Re-forging…"}
+                          </span>
+                          <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-4)" }}>
+                            {reforgeProgress}%
+                          </span>
+                        </div>
+                        {/* Progress bar */}
+                        <div className="relative h-1 w-full overflow-hidden rounded-full" style={{ background: "var(--bg-overlay)" }}>
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${reforgeProgress}%`,
+                              background: reforgeProgress === 100
+                                ? "var(--green)"
+                                : "linear-gradient(90deg, var(--forge), #60a5fa)",
+                              transition: "width 600ms cubic-bezier(0.4,0,0.2,1)",
+                              boxShadow: "0 0 8px rgba(167,139,250,0.5)",
+                            }}
+                          />
+                        </div>
+                        {/* Step label */}
+                        <p style={{ fontSize: "11px", color: "var(--text-3)", marginTop: "10px" }}>
+                          {reforgeStep}
+                        </p>
+                      </div>
+                    ) : (
+                      /* ── Edit form ── */
+                      <>
+                        <p style={{ fontSize: "11px", color: "var(--text-3)", marginBottom: "10px" }}>
+                          Describe what you want to change — Claude reads the existing code and only modifies what's needed.
+                        </p>
+                        <textarea value={editIdea} onChange={(e) => setEditIdea(e.target.value)} rows={3} placeholder="What should change…"
+                          className="w-full resize-none rounded-xl bg-transparent px-3 py-2.5 outline-none"
+                          style={{ fontSize: "13px", fontFamily: "var(--font-ui)", color: "var(--text-1)", background: "var(--bg-overlay)", border: "1px solid var(--border)", lineHeight: "1.5" }} />
+                        {reforgeError && <p style={{ fontSize: "11px", color: "var(--red)", marginTop: "6px" }}>{reforgeError}</p>}
+                        <div className="mt-3 flex justify-end gap-2">
+                          <button onClick={() => setEditSlug(null)} className="rounded-lg px-3 py-1.5 text-[12px]"
+                            style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)", color: "var(--text-3)" }}>Cancel</button>
+                          <button onClick={reforgeApp} disabled={!editIdea.trim()} className="rounded-lg px-4 py-1.5 text-[12px] font-medium"
+                            style={{ background: "rgba(167,139,250,0.14)", border: "1px solid rgba(167,139,250,0.28)", color: "var(--forge)", cursor: editIdea.trim() ? "pointer" : "not-allowed" }}>
+                            ⚡ Re-forge
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
 
