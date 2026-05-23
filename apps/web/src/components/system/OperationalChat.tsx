@@ -199,7 +199,10 @@ export function OperationalChat({ keyStatus }: { keyStatus?: { openai: boolean; 
   const gitRuntime    = useGitRuntime()
   const fileRuntime   = useFileRuntime()
   const { loading, executePrompt } = useAiRuntime()
-  const bottomRef     = useRef<HTMLDivElement | null>(null)
+  const bottomRef       = useRef<HTMLDivElement | null>(null)
+  const scrollAreaRef   = useRef<HTMLDivElement>(null)
+  const isNearBottomRef = useRef(true)
+  const [showScrollBtn, setShowScrollBtn] = useState(false)
 
   const [openaiKey,    setOpenaiKey]    = useState("")
   const [anthropicKey, setAnthropicKey] = useState("")
@@ -217,6 +220,19 @@ export function OperationalChat({ keyStatus }: { keyStatus?: { openai: boolean; 
   const [claudeModel, setClaudeModel] = useState(() =>
     typeof window !== "undefined" ? (localStorage.getItem("foundry-claude-model") ?? "claude-sonnet-4-6") : "claude-sonnet-4-6"
   )
+
+  function handleScroll() {
+    const el = scrollAreaRef.current
+    if (!el) return
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150
+    isNearBottomRef.current = nearBottom
+    setShowScrollBtn(!nearBottom)
+  }
+
+  function scrollBottom(force = false) {
+    if (!force && !isNearBottomRef.current) return
+    requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }))
+  }
 
   function copyEvent(id: string, content: string) {
     navigator.clipboard.writeText(content)
@@ -279,7 +295,7 @@ export function OperationalChat({ keyStatus }: { keyStatus?: { openai: boolean; 
     const built = generateAiPrompt({ continuity: context, userMessage: input })
     setBuiltPrompt(built)
     setInput("")
-    requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }))
+    scrollBottom(true)
 
     if (!openaiKey.trim() && !anthropicKey.trim()) {
       appendOperationalEvent({ id: createRuntimeId(), type: "error", content: "No API key set.", createdAt: new Date().toISOString() })
@@ -293,7 +309,7 @@ export function OperationalChat({ keyStatus }: { keyStatus?: { openai: boolean; 
       claudeModel,
       (partial) => {
         setStreamingContent(partial)
-        requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }))
+        scrollBottom() // respects user scroll position
       },
     )
 
@@ -313,7 +329,8 @@ export function OperationalChat({ keyStatus }: { keyStatus?: { openai: boolean; 
       pipeline:  result.pipeline,
       usage:     result.usage,
     })
-    requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }))
+    setShowScrollBtn(false)
+    scrollBottom(true) // always scroll to final result
   }
 
   async function onKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -329,7 +346,9 @@ export function OperationalChat({ keyStatus }: { keyStatus?: { openai: boolean; 
     <div className="flex h-full flex-col">
 
       {/* ── Event stream ── */}
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      <div ref={scrollAreaRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto px-4 py-4">
         <div className="mx-auto max-w-2xl space-y-2">
 
           {events.map((ev) => {
@@ -438,6 +457,22 @@ export function OperationalChat({ keyStatus }: { keyStatus?: { openai: boolean; 
               </div>
             )
           })()}
+          {/* Scroll to bottom button — shown when user scrolls up during streaming */}
+          {showScrollBtn && (
+            <div className="sticky bottom-2 flex justify-center">
+              <button
+                onClick={() => { scrollBottom(true); setShowScrollBtn(false) }}
+                className="flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[11px] shadow-lg"
+                style={{
+                  background:     "var(--bg-overlay)",
+                  border:         "1px solid var(--border)",
+                  color:          "var(--text-3)",
+                  backdropFilter: "blur(8px)",
+                }}>
+                ↓ Jump to bottom
+              </button>
+            </div>
+          )}
           <div ref={bottomRef} />
         </div>
       </div>
