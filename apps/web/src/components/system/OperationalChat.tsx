@@ -211,6 +211,12 @@ export function OperationalChat() {
   const [sessionTokens, setSessionTokens] = useState({ input: 0, output: 0 })
   // Copy button feedback per event
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  // Streaming in-progress content
+  const [streamingContent, setStreamingContent] = useState("")
+  // Model selector
+  const [claudeModel, setClaudeModel] = useState(() =>
+    typeof window !== "undefined" ? (localStorage.getItem("foundry-claude-model") ?? "claude-sonnet-4-6") : "claude-sonnet-4-6"
+  )
 
   function copyEvent(id: string, content: string) {
     navigator.clipboard.writeText(content)
@@ -224,6 +230,27 @@ export function OperationalChat() {
     if (oa) setOpenaiKey(oa)
     if (an) setAnthropicKey(an)
   }, [])
+
+  // Health monitor — poll every 60s, post system events on crashes
+  useEffect(() => {
+    async function checkHealth() {
+      try {
+        const res = await fetch("/api/apps/health")
+        const { crashed } = await res.json()
+        if (Array.isArray(crashed)) {
+          crashed.forEach((app: { name: string; pm2Name: string; restarts: number }) => {
+            appendOperationalEvent({
+              id: createRuntimeId(), type: "error",
+              content: `⚠ Forged app "${app.name}" is crashing (${app.restarts} restarts). Check Logs in the Apps tab.`,
+              createdAt: new Date().toISOString(),
+            })
+          })
+        }
+      } catch { /* non-fatal */ }
+    }
+    const interval = setInterval(checkHealth, 60_000)
+    return () => clearInterval(interval)
+  }, [appendOperationalEvent])
 
   function saveOpenaiKey(v: string)    { setOpenaiKey(v);    localStorage.setItem("foundry-openai-key",    v) }
   function saveAnthropicKey(v: string) { setAnthropicKey(v); localStorage.setItem("foundry-anthropic-key", v) }
@@ -247,7 +274,8 @@ export function OperationalChat() {
   async function send() {
     if (!input.trim()) return
 
-    appendOperationalEvent({ id: createRuntimeId(), type: "command", content: input, createdAt: new Date().toISOString() })
+    const cmdId = createRuntimeId()
+    appendOperationalEvent({ id: cmdId, type: "command", content: input, createdAt: new Date().toISOString() })
     const built = generateAiPrompt({ continuity: context, userMessage: input })
     setBuiltPrompt(built)
     setInput("")
@@ -258,23 +286,33 @@ export function OperationalChat() {
       return
     }
 
-    const result = await executePrompt({ openaiKey: openaiKey.trim(), anthropicKey: anthropicKey.trim() }, built)
+    // Streaming — update streamingContent as chunks arrive
+    const result = await executePrompt(
+      { openaiKey: openaiKey.trim(), anthropicKey: anthropicKey.trim() },
+      built,
+      claudeModel,
+      (partial) => {
+        setStreamingContent(partial)
+        requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }))
+      },
+    )
 
-    // Accumulate session tokens
+    // Streaming done — clear live content and append final event
+    setStreamingContent("")
+
     setSessionTokens(prev => ({
       input:  prev.input  + result.usage.inputTokens,
       output: prev.output + result.usage.outputTokens,
     }))
 
-    const ev = {
+    appendOperationalEvent({
       id:        createRuntimeId(),
-      type:      (result.pipeline === "error" ? "error" : "result") as OperationalEventType,
+      type:      result.pipeline === "error" ? "error" : "result",
       content:   result.content,
       createdAt: new Date().toISOString(),
       pipeline:  result.pipeline,
       usage:     result.usage,
-    }
-    appendOperationalEvent(ev)
+    })
     requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }))
   }
 
@@ -349,6 +387,22 @@ export function OperationalChat() {
               </div>
             )
           })}
+
+          {/* Live streaming event */}
+          {streamingContent && (
+            <div className="fade-up flex gap-3 rounded-xl p-3.5" style={{ background: "var(--bg-raised)", border: "1px solid var(--border-subtle)" }}>
+              <div className="min-w-0 flex-1">
+                <div className="mb-2 flex items-center gap-2">
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-3)" }}>result</span>
+                  <span className="rounded px-1.5 py-0.5" style={{ fontFamily: "var(--font-mono)", fontSize: "9px", background: "rgba(167,139,250,0.1)", border: "1px solid rgba(167,139,250,0.18)", color: "var(--forge)" }}>
+                    {openaiKey && anthropicKey ? "GPT → Claude" : anthropicKey ? "Claude" : "GPT"} ·&nbsp;
+                    <span className="inline-block w-1.5 h-1.5 rounded-full align-middle" style={{ background: "var(--forge)", animation: "pulse-dot 1s ease infinite" }} />
+                  </span>
+                </div>
+                <MarkdownContent text={streamingContent} />
+              </div>
+            </div>
+          )}
 
           {loading && (
             <div className="fade-up flex items-center gap-2.5 rounded-xl px-4 py-3" style={{ background: "rgba(167,139,250,0.06)", border: "1px solid rgba(167,139,250,0.12)" }}>
@@ -436,19 +490,39 @@ export function OperationalChat() {
               {/* Actions row */}
               <div className="flex items-center justify-between">
                 {/* Pipeline + session tokens */}
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
                   <div className="flex items-center gap-1.5">
                     <span style={{ fontSize: "10px", color: "var(--text-4)" }}>pipeline:</span>
                     <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: openaiKey && anthropicKey ? "var(--forge)" : "var(--text-3)" }}>
                       {pipelineHint}
                     </span>
                   </div>
+                  {/* Model selector */}
+                  <div className="flex items-center gap-1">
+                    {[
+                      { id: "claude-haiku-4-5-20251001", label: "Haiku" },
+                      { id: "claude-sonnet-4-6",         label: "Sonnet" },
+                      { id: "claude-opus-4-6",           label: "Opus" },
+                    ].map(({ id, label }) => (
+                      <button
+                        key={id}
+                        onClick={() => { setClaudeModel(id); localStorage.setItem("foundry-claude-model", id) }}
+                        className="rounded-md px-2 py-0.5 text-[10px]"
+                        style={{
+                          background: claudeModel === id ? "rgba(167,139,250,0.14)" : "transparent",
+                          border: `1px solid ${claudeModel === id ? "rgba(167,139,250,0.3)" : "var(--border-subtle)"}`,
+                          color: claudeModel === id ? "var(--forge)" : "var(--text-4)",
+                          cursor: "pointer",
+                        }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                   {(sessionTokens.input > 0 || sessionTokens.output > 0) && (
-                    <div className="flex items-center gap-1" style={{ color: "var(--text-4)" }}>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px" }}>
-                        session ↑{fmtTokens(sessionTokens.input)} ↓{fmtTokens(sessionTokens.output)}
-                      </span>
-                    </div>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-4)" }}>
+                      ↑{fmtTokens(sessionTokens.input)} ↓{fmtTokens(sessionTokens.output)}
+                    </span>
                   )}
                 </div>
 

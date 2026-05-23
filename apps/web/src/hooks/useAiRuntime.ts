@@ -12,8 +12,10 @@ export function useAiRuntime() {
   const [loading, setLoading] = useState(false)
 
   async function executePrompt(
-    keys: { openaiKey: string; anthropicKey: string },
-    prompt: string,
+    keys:      { openaiKey: string; anthropicKey: string },
+    prompt:    string,
+    model:     string,
+    onChunk:   (partial: string) => void,
   ): Promise<AiResult> {
     setLoading(true)
 
@@ -21,40 +23,72 @@ export function useAiRuntime() {
       const response = await fetch("/api/ai", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ openaiKey: keys.openaiKey, anthropicKey: keys.anthropicKey, prompt }),
+        body: JSON.stringify({
+          openaiKey:    keys.openaiKey,
+          anthropicKey: keys.anthropicKey,
+          prompt,
+          model,
+        }),
       })
 
-      const text = await response.text()
-
-      let data: Record<string, unknown>
-      try {
-        data = JSON.parse(text)
-      } catch {
+      if (!response.ok || !response.body) {
         return {
-          content:  "Server returned an unexpected response. This usually means a timeout. Try again.",
+          content:  "Server error — could not connect to AI runtime.",
           pipeline: "error",
           usage:    { inputTokens: 0, outputTokens: 0 },
         }
       }
 
-      if (!response.ok) {
+      const reader  = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buf  = ""
+      let text = ""
+      let meta: AiUsage & { pipeline?: string } = { inputTokens: 0, outputTokens: 0 }
+      let pipeline = "unknown"
+      let errorMsg = ""
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buf += decoder.decode(value, { stream: true })
+        const lines = buf.split("\n")
+        buf = lines.pop() ?? ""
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue
+          const raw = line.slice(6).trim()
+          try {
+            const ev = JSON.parse(raw)
+            if (ev.chunk !== undefined) {
+              text += ev.chunk
+              onChunk(text)
+            }
+            if (ev.meta) {
+              meta     = ev.meta
+              pipeline = ev.meta.pipeline ?? "unknown"
+            }
+            if (ev.error) {
+              errorMsg = ev.error
+            }
+          } catch { /* skip malformed */ }
+        }
+      }
+
+      if (errorMsg) {
         return {
-          content:  typeof data.error === "string" ? `Error: ${data.error}` : "Request failed.",
+          content:  `Error: ${errorMsg}`,
           pipeline: "error",
           usage:    { inputTokens: 0, outputTokens: 0 },
         }
       }
 
       return {
-        content:  typeof data.content  === "string" ? data.content  : "Empty response.",
-        pipeline: typeof data.pipeline === "string" ? data.pipeline : "unknown",
-        usage: {
-          inputTokens:  typeof (data.usage as AiUsage)?.inputTokens  === "number" ? (data.usage as AiUsage).inputTokens  : 0,
-          outputTokens: typeof (data.usage as AiUsage)?.outputTokens === "number" ? (data.usage as AiUsage).outputTokens : 0,
-        },
+        content:  text || "Empty response.",
+        pipeline,
+        usage:    { inputTokens: meta.inputTokens ?? 0, outputTokens: meta.outputTokens ?? 0 },
       }
     } catch (err) {
-      console.error("[useAiRuntime]", err)
       return {
         content:  "Network error — could not reach the AI runtime.",
         pipeline: "error",

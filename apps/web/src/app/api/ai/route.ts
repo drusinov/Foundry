@@ -1,15 +1,14 @@
 import { NextResponse } from "next/server"
 
-const OPENAI_MODEL    = "gpt-4.1-mini"
-const CLAUDE_MODEL    = "claude-opus-4-5"
+export const dynamic = "force-dynamic"
 
-const OPENAI_STRUCTURER_PROMPT = `
+const OPENAI_STRUCTURER = `
 You are a prompt structuring assistant inside Foundry, an AI-native development workspace.
 Extract only what's relevant to the user's request and produce a clear, concise, structured prompt for Claude.
 Do not answer the question yourself. Just structure it.
 `.trim()
 
-const CLAUDE_SYSTEM_PROMPT = `
+const CLAUDE_SYSTEM = `
 You are the operational AI assistant embedded in Foundry — Deyan Rusinov's AI-native development workspace.
 Foundry is NOT the Ethereum/Solidity tool. It is a personal command center for managing software development,
 deployment, and AI-assisted workflows built with Next.js 16, Turborepo, pnpm, Ubuntu VPS, PM2, nginx.
@@ -20,127 +19,243 @@ Architecture:
 - Forged Apps — apps created by Forge, each with their own git repo + VPS deployment.
 
 Response style:
-- Use markdown formatting: headers, **bold**, bullet lists, \`inline code\`, and fenced code blocks
-- Be direct and concise. No bureaucratic headers like "Safest Implementation Direction".
-- When writing code, use proper fenced code blocks with the language specified.
-- Respond in the same language the user writes in (English or Bulgarian).
+- Use markdown: headers, **bold**, bullet lists, \`inline code\`, fenced code blocks with language
+- Be direct. No bureaucratic headers like "Safest Implementation Direction".
+- Respond in the same language the user writes in.
 `.trim()
 
-const SINGLE_PROVIDER_SYSTEM = `
-You are the operational AI assistant for Foundry. Be direct, use markdown formatting, and respond in the user's language.
-`.trim()
+const OPENAI_SYSTEM = `You are the operational AI for Foundry. Be direct, use markdown, respond in the user's language.`.trim()
+
+const encoder = new TextEncoder()
+
+function sseChunk(text: string) {
+  return encoder.encode(`data: ${JSON.stringify({ chunk: text })}\n\n`)
+}
+
+function sseMeta(data: Record<string, unknown>) {
+  return encoder.encode(`data: ${JSON.stringify({ meta: data })}\n\n`)
+}
+
+function sseError(msg: string) {
+  return encoder.encode(`data: ${JSON.stringify({ error: msg })}\n\n`)
+}
 
 export async function POST(request: Request) {
-  try {
-    const body = await request.json()
-    const { openaiKey, anthropicKey, prompt } = body
+  const body = await request.json().catch(() => null)
+  if (!body) return NextResponse.json({ error: "Invalid body" }, { status: 400 })
 
-    if (!prompt || typeof prompt !== "string") {
-      return NextResponse.json({ error: "Prompt is required" }, { status: 400 })
-    }
+  const { openaiKey, anthropicKey, prompt, model = "claude-sonnet-4-6" } = body
 
-    const hasOpenAI    = typeof openaiKey    === "string" && openaiKey.trim().length > 0
-    const hasAnthropic = typeof anthropicKey === "string" && anthropicKey.trim().length > 0
+  if (!prompt) return NextResponse.json({ error: "Prompt required" }, { status: 400 })
 
-    if (!hasOpenAI && !hasAnthropic) {
-      return NextResponse.json({ error: "At least one API key is required." }, { status: 400 })
-    }
+  const hasOpenAI    = typeof openaiKey    === "string" && openaiKey.trim().length > 0
+  const hasAnthropic = typeof anthropicKey === "string" && anthropicKey.trim().length > 0
 
-    // ── Two-stage: OpenAI → Claude ──────────────────────────────────────────
-    if (hasOpenAI && hasAnthropic) {
-      const stage1 = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${openaiKey}` },
-        body: JSON.stringify({
-          model: OPENAI_MODEL,
-          messages: [
-            { role: "system", content: OPENAI_STRUCTURER_PROMPT },
-            { role: "user",   content: prompt },
-          ],
-          temperature: 0.2,
-        }),
-      })
-
-      const stage1Data = await stage1.json()
-      if (!stage1.ok) {
-        return NextResponse.json({ error: `OpenAI error: ${stage1Data.error?.message ?? "unknown"}` }, { status: 502 })
-      }
-
-      const structuredPrompt = stage1Data.choices?.[0]?.message?.content ?? prompt
-      const openaiUsage = stage1Data.usage ?? {}
-
-      const stage2 = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": anthropicKey, "anthropic-version": "2023-06-01" },
-        body: JSON.stringify({
-          model:      CLAUDE_MODEL,
-          max_tokens: 2048,
-          system:     CLAUDE_SYSTEM_PROMPT,
-          messages:   [{ role: "user", content: structuredPrompt }],
-        }),
-      })
-
-      const stage2Data = await stage2.json()
-      if (!stage2.ok) {
-        return NextResponse.json({ error: `Claude error: ${stage2Data.error?.message ?? "unknown"}` }, { status: 502 })
-      }
-
-      const claudeUsage = stage2Data.usage ?? {}
-
-      return NextResponse.json({
-        content:  stage2Data.content?.[0]?.text ?? "Empty response from Claude.",
-        pipeline: "openai→claude",
-        usage: {
-          inputTokens:  (openaiUsage.prompt_tokens ?? 0) + (claudeUsage.input_tokens ?? 0),
-          outputTokens: (openaiUsage.completion_tokens ?? 0) + (claudeUsage.output_tokens ?? 0),
-        },
-      })
-    }
-
-    // ── Claude only ─────────────────────────────────────────────────────────
-    if (hasAnthropic) {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": anthropicKey, "anthropic-version": "2023-06-01" },
-        body: JSON.stringify({
-          model:      CLAUDE_MODEL,
-          max_tokens: 2048,
-          system:     CLAUDE_SYSTEM_PROMPT,
-          messages:   [{ role: "user", content: prompt }],
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        return NextResponse.json({ error: `Claude error: ${data.error?.message ?? "unknown"}` }, { status: 502 })
-      }
-      return NextResponse.json({
-        content:  data.content?.[0]?.text ?? "Empty response.",
-        pipeline: "claude",
-        usage: { inputTokens: data.usage?.input_tokens ?? 0, outputTokens: data.usage?.output_tokens ?? 0 },
-      })
-    }
-
-    // ── OpenAI only ──────────────────────────────────────────────────────────
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${openaiKey}` },
-      body: JSON.stringify({
-        model:    OPENAI_MODEL,
-        messages: [{ role: "system", content: SINGLE_PROVIDER_SYSTEM }, { role: "user", content: prompt }],
-        temperature: 0.4,
-      }),
-    })
-    const data = await res.json()
-    if (!res.ok) {
-      return NextResponse.json({ error: `OpenAI error: ${data.error?.message ?? "unknown"}` }, { status: 502 })
-    }
-    return NextResponse.json({
-      content:  data.choices?.[0]?.message?.content ?? "Empty response.",
-      pipeline: "openai",
-      usage: { inputTokens: data.usage?.prompt_tokens ?? 0, outputTokens: data.usage?.completion_tokens ?? 0 },
-    })
-  } catch (error) {
-    console.error("[ai/route]", error instanceof Error ? error.message : error)
-    return NextResponse.json({ error: "AI runtime failure" }, { status: 500 })
+  if (!hasOpenAI && !hasAnthropic) {
+    return NextResponse.json({ error: "At least one API key required" }, { status: 400 })
   }
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        // ── Two-stage: OpenAI → Claude (streaming) ──────────────────────────
+        if (hasOpenAI && hasAnthropic) {
+          // Stage 1: OpenAI structures the prompt (non-streaming, fast)
+          const s1 = await fetch("https://api.openai.com/v1/chat/completions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${openaiKey}` },
+            body: JSON.stringify({
+              model: "gpt-4.1-mini",
+              messages: [
+                { role: "system", content: OPENAI_STRUCTURER },
+                { role: "user",   content: prompt },
+              ],
+              temperature: 0.2,
+            }),
+          })
+          const s1Data = await s1.json()
+          if (!s1.ok) {
+            controller.enqueue(sseError(`OpenAI error: ${s1Data.error?.message ?? "unknown"}`))
+            controller.close(); return
+          }
+          const structured = s1Data.choices?.[0]?.message?.content ?? prompt
+          const openaiUsage = s1Data.usage ?? {}
+
+          // Stage 2: Claude streams the response
+          const s2 = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: {
+              "Content-Type":      "application/json",
+              "x-api-key":         anthropicKey,
+              "anthropic-version": "2023-06-01",
+            },
+            body: JSON.stringify({
+              model,
+              max_tokens: 4096,
+              stream:     true,
+              system:     CLAUDE_SYSTEM,
+              messages:   [{ role: "user", content: structured }],
+            }),
+          })
+
+          if (!s2.ok) {
+            const err = await s2.json()
+            controller.enqueue(sseError(`Claude error: ${err.error?.message ?? "unknown"}`))
+            controller.close(); return
+          }
+
+          let claudeInput = 0, claudeOutput = 0
+          const reader = s2.body!.getReader()
+          const dec    = new TextDecoder()
+          let buf = ""
+
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            buf += dec.decode(value, { stream: true })
+            const lines = buf.split("\n")
+            buf = lines.pop() ?? ""
+
+            for (const line of lines) {
+              if (!line.startsWith("data: ")) continue
+              const raw = line.slice(6).trim()
+              if (raw === "[DONE]") continue
+              try {
+                const ev = JSON.parse(raw)
+                if (ev.type === "message_start")      claudeInput  = ev.message?.usage?.input_tokens ?? 0
+                if (ev.type === "message_delta")       claudeOutput = ev.usage?.output_tokens ?? 0
+                if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta") {
+                  controller.enqueue(sseChunk(ev.delta.text))
+                }
+              } catch { /* skip malformed */ }
+            }
+          }
+
+          controller.enqueue(sseMeta({
+            pipeline:     "openai→claude",
+            inputTokens:  (openaiUsage.prompt_tokens ?? 0) + claudeInput,
+            outputTokens: (openaiUsage.completion_tokens ?? 0) + claudeOutput,
+          }))
+          controller.close()
+          return
+        }
+
+        // ── Claude only (streaming) ─────────────────────────────────────────
+        if (hasAnthropic) {
+          const res = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: {
+              "Content-Type":      "application/json",
+              "x-api-key":         anthropicKey,
+              "anthropic-version": "2023-06-01",
+            },
+            body: JSON.stringify({
+              model,
+              max_tokens: 4096,
+              stream:     true,
+              system:     CLAUDE_SYSTEM,
+              messages:   [{ role: "user", content: prompt }],
+            }),
+          })
+
+          if (!res.ok) {
+            const err = await res.json()
+            controller.enqueue(sseError(`Claude error: ${err.error?.message ?? "unknown"}`))
+            controller.close(); return
+          }
+
+          let inputTokens = 0, outputTokens = 0
+          const reader = res.body!.getReader()
+          const dec    = new TextDecoder()
+          let buf = ""
+
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            buf += dec.decode(value, { stream: true })
+            const lines = buf.split("\n")
+            buf = lines.pop() ?? ""
+
+            for (const line of lines) {
+              if (!line.startsWith("data: ")) continue
+              const raw = line.slice(6).trim()
+              if (raw === "[DONE]") continue
+              try {
+                const ev = JSON.parse(raw)
+                if (ev.type === "message_start")      inputTokens  = ev.message?.usage?.input_tokens ?? 0
+                if (ev.type === "message_delta")       outputTokens = ev.usage?.output_tokens ?? 0
+                if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta") {
+                  controller.enqueue(sseChunk(ev.delta.text))
+                }
+              } catch { /* skip */ }
+            }
+          }
+
+          controller.enqueue(sseMeta({ pipeline: "claude", inputTokens, outputTokens }))
+          controller.close()
+          return
+        }
+
+        // ── OpenAI only (streaming) ─────────────────────────────────────────
+        const res = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${openaiKey}` },
+          body: JSON.stringify({
+            model:    "gpt-4.1-mini",
+            stream:   true,
+            messages: [
+              { role: "system", content: OPENAI_SYSTEM },
+              { role: "user",   content: prompt },
+            ],
+            temperature: 0.4,
+          }),
+        })
+
+        if (!res.ok) {
+          const err = await res.json()
+          controller.enqueue(sseError(`OpenAI error: ${err.error?.message ?? "unknown"}`))
+          controller.close(); return
+        }
+
+        let promptTokens = 0, completionTokens = 0
+        const reader = res.body!.getReader()
+        const dec    = new TextDecoder()
+        let buf = ""
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buf += dec.decode(value, { stream: true })
+          const lines = buf.split("\n")
+          buf = lines.pop() ?? ""
+
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue
+            const raw = line.slice(6).trim()
+            if (raw === "[DONE]") continue
+            try {
+              const ev = JSON.parse(raw)
+              const chunk = ev.choices?.[0]?.delta?.content
+              if (chunk) controller.enqueue(sseChunk(chunk))
+              if (ev.usage) { promptTokens = ev.usage.prompt_tokens; completionTokens = ev.usage.completion_tokens }
+            } catch { /* skip */ }
+          }
+        }
+
+        controller.enqueue(sseMeta({ pipeline: "openai", inputTokens: promptTokens, outputTokens: completionTokens }))
+        controller.close()
+      } catch (err) {
+        controller.enqueue(sseError(err instanceof Error ? err.message : "AI runtime failure"))
+        controller.close()
+      }
+    },
+  })
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type":          "text/event-stream",
+      "Cache-Control":         "no-cache",
+      "X-Accel-Buffering":     "no",   // tell nginx not to buffer
+    },
+  })
 }

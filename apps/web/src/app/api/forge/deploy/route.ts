@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import fs from "node:fs"
 import path from "node:path"
-import { execSync } from "node:child_process"
+import { execSync, spawn } from "node:child_process"
 
 export const dynamic = "force-dynamic"
 
@@ -10,28 +10,26 @@ const REGISTRY_PATH = "/opt/foundry/forged-apps.json"
 const NGINX_CONFIG  = "/etc/nginx/sites-available/dashboard"
 const BASE_PORT     = 4000
 
+const enc = new TextEncoder()
+
+function sse(data: Record<string, unknown>) {
+  return enc.encode(`data: ${JSON.stringify(data)}\n\n`)
+}
+
 type ForgedApp = {
   id: string; name: string; slug: string; description: string
   status: "deploying" | "running" | "stopped" | "error"
   port: number; url: string; pm2Name: string; appDir: string
-  mode: "dev" | "production"
-  createdAt: string
+  mode: "dev" | "production"; createdAt: string
 }
 
 function readRegistry(): ForgedApp[] {
-  try {
-    if (!fs.existsSync(REGISTRY_PATH)) return []
-    return JSON.parse(fs.readFileSync(REGISTRY_PATH, "utf8"))
-  } catch { return [] }
+  try { return JSON.parse(fs.readFileSync(REGISTRY_PATH, "utf8")) } catch { return [] }
 }
+function writeRegistry(apps: ForgedApp[]) { fs.writeFileSync(REGISTRY_PATH, JSON.stringify(apps, null, 2)) }
 
-function writeRegistry(apps: ForgedApp[]) {
-  fs.writeFileSync(REGISTRY_PATH, JSON.stringify(apps, null, 2))
-}
-
-function nextPort(apps: ForgedApp[]): number {
-  if (apps.length === 0) return BASE_PORT
-  return Math.max(...apps.map(a => a.port).filter(Boolean)) + 1
+function nextPort(apps: ForgedApp[]) {
+  return apps.length === 0 ? BASE_PORT : Math.max(...apps.map(a => a.port).filter(Boolean)) + 1
 }
 
 function addNginxLocation(slug: string, port: number) {
@@ -62,9 +60,22 @@ function writeFiles(appDir: string, files: Record<string, string>) {
   }
 }
 
+async function runWithLog(
+  cmd: string, args: string[], cwd: string, timeout: number,
+  onLog: (line: string) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(cmd, args, { cwd, timeout })
+    proc.stdout.on("data", (d) => d.toString().split("\n").filter(Boolean).forEach(onLog))
+    proc.stderr.on("data", (d) => d.toString().split("\n").filter(Boolean).forEach(onLog))
+    proc.on("close", (code) => code === 0 ? resolve() : reject(new Error(`${cmd} exited with code ${code}`)))
+    proc.on("error", reject)
+  })
+}
+
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null)
-  if (!body) return NextResponse.json({ error: "Invalid request body" }, { status: 400 })
+  if (!body) return NextResponse.json({ error: "Invalid body" }, { status: 400 })
 
   const { slug, description, files } = body as {
     slug: string; description: string; files: Record<string, string>
@@ -78,65 +89,85 @@ export async function POST(request: Request) {
   const port    = nextPort(apps)
   const appDir  = path.join(APPS_DIR, slug)
   const pm2Name = `forge-${slug}`
+  const url     = `https://drusinov.eu/apps/${slug}/`
 
   const newApp: ForgedApp = {
     id:          `app_${Date.now().toString(36)}`,
-    name:        slug.replace(/-[a-z0-9]{6,}$/, "").replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
-    slug,
-    description: description ?? "",
-    status:      "deploying",
-    port,
-    url:         `https://drusinov.eu/apps/${slug}/`,
-    pm2Name,
-    appDir,
-    mode:        "dev",
-    createdAt:   new Date().toISOString(),
+    name:        slug.replace(/-[a-z0-9]{4,}$/, "").replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
+    slug, description: description ?? "",
+    status: "deploying", port, url, pm2Name, appDir,
+    mode: "dev", createdAt: new Date().toISOString(),
   }
   apps.push(newApp)
   writeRegistry(apps)
 
-  try {
-    // 1 — Write files
-    fs.mkdirSync(appDir, { recursive: true })
-    writeFiles(appDir, files)
+  const stream = new ReadableStream({
+    async start(controller) {
+      const log = (line: string) => controller.enqueue(sse({ log: line }))
 
-    // 2 — Git init (non-fatal if it fails)
-    try {
-      execSync("git init", { cwd: appDir, stdio: "pipe" })
-      execSync("git config user.email 'forge@foundry.local'", { cwd: appDir, stdio: "pipe" })
-      execSync("git config user.name 'Foundry Forge'", { cwd: appDir, stdio: "pipe" })
-      execSync(`git add . && git commit -m "Initial forge: ${slug}"`, { cwd: appDir, stdio: "pipe" })
-    } catch (gitErr) {
-      console.warn("[forge/deploy] git init failed (non-fatal):", gitErr)
-    }
+      try {
+        // 1 — Write files
+        log(`📁 Writing ${Object.keys(files).length} files…`)
+        fs.mkdirSync(appDir, { recursive: true })
+        writeFiles(appDir, files)
+        log("✓ Files written")
 
-    // 3 — npm install
-    execSync("npm install --prefer-offline", { cwd: appDir, timeout: 90_000, stdio: "pipe" })
+        // 2 — Git init
+        log("🔧 Initialising git repository…")
+        try {
+          execSync("git init", { cwd: appDir, stdio: "pipe" })
+          execSync("git config user.email 'forge@foundry.local'", { cwd: appDir, stdio: "pipe" })
+          execSync("git config user.name 'Foundry Forge'", { cwd: appDir, stdio: "pipe" })
+          execSync(`git add . && git commit -m "Initial forge: ${slug}"`, { cwd: appDir, stdio: "pipe" })
+          log("✓ Git repo initialised")
+        } catch { log("⚠ Git init skipped") }
 
-    // 4 — Start with PM2 in dev mode
-    execSync(
-      `pm2 start ./node_modules/.bin/next --name ${pm2Name} -- dev --port ${port}`,
-      { cwd: appDir, timeout: 15_000, stdio: "pipe" },
-    )
-    execSync("pm2 save", { timeout: 5_000, stdio: "pipe" })
+        // 3 — npm install (streamed)
+        log("📦 Installing packages…")
+        await runWithLog("npm", ["install", "--prefer-offline"], appDir, 90000, log)
+        log("✓ Packages installed")
 
-    // 5 — nginx
-    addNginxLocation(slug, port)
+        // 4 — Start with PM2
+        log("🚀 Starting app with PM2…")
+        execSync(
+          `pm2 start ./node_modules/.bin/next --name ${pm2Name} -- dev --port ${port}`,
+          { cwd: appDir, timeout: 15000, stdio: "pipe" },
+        )
+        execSync("pm2 save", { timeout: 5000, stdio: "pipe" })
+        log(`✓ App started on port ${port}`)
 
-    // 6 — Mark running
-    const updated = readRegistry().map(a =>
-      a.slug === slug ? { ...a, status: "running" as const } : a
-    )
-    writeRegistry(updated)
+        // 5 — nginx
+        log("🌐 Updating nginx routing…")
+        addNginxLocation(slug, port)
+        log("✓ nginx updated and reloaded")
 
-    return NextResponse.json({ success: true, slug, port, url: newApp.url, pm2Name })
-  } catch (error) {
-    const updated = readRegistry().map(a =>
-      a.slug === slug ? { ...a, status: "error" as const } : a
-    )
-    writeRegistry(updated)
-    const msg = error instanceof Error ? error.message : String(error)
-    console.error("[forge/deploy]", msg)
-    return NextResponse.json({ error: msg }, { status: 500 })
-  }
+        // 6 — Mark running
+        const updated = readRegistry().map(a =>
+          a.slug === slug ? { ...a, status: "running" as const } : a
+        )
+        writeRegistry(updated)
+
+        log(`✓ Live at ${url}`)
+        controller.enqueue(sse({ done: true, url, slug, port, pm2Name }))
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error)
+        const updated = readRegistry().map(a =>
+          a.slug === slug ? { ...a, status: "error" as const } : a
+        )
+        writeRegistry(updated)
+        log(`✗ Deploy failed: ${msg}`)
+        controller.enqueue(sse({ error: msg }))
+      }
+
+      controller.close()
+    },
+  })
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type":      "text/event-stream",
+      "Cache-Control":     "no-cache",
+      "X-Accel-Buffering": "no",
+    },
+  })
 }

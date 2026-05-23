@@ -30,6 +30,7 @@ function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
   const [liveUrl, setLiveUrl]         = useState("")
   const [error, setError]             = useState("")
   const [anthropicKey, setAnthropicKey] = useState("")
+  const [deployLogs, setDeployLogs] = useState<string[]>([])
 
   useEffect(() => {
     const k = localStorage.getItem("foundry-anthropic-key")
@@ -51,21 +52,43 @@ function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
     })
     const data = await res.json()
     if (!res.ok || data.error) { setError(data.error ?? "Generation failed"); setStatus("error"); return }
-    setSlug(data.slug); setFiles(data.files); setStatus("generated")
+    setSlug(data.slug); setFiles(data.files)
+    // Store AI-generated description if available
+    if (data.description) setIdea(data.description)
+    setStatus("generated")
   }
 
   async function deploy() {
-    setStatus("deploying")
+    setStatus("deploying"); setDeployLogs([])
     const res = await fetch("/api/forge/deploy", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ slug, description: idea, files }),
     })
-    const data = await res.json()
-    if (!res.ok || data.error) { setError(data.error ?? "Deploy failed"); setStatus("error"); return }
-    setLiveUrl(data.url); setStatus("live")
+    if (!res.ok || !res.body) { setError("Deploy request failed"); setStatus("error"); return }
+
+    const reader  = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buf = ""
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buf += decoder.decode(value, { stream: true })
+      const lines = buf.split("\n")
+      buf = lines.pop() ?? ""
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue
+        try {
+          const ev = JSON.parse(line.slice(6))
+          if (ev.log)   setDeployLogs(prev => [...prev, ev.log])
+          if (ev.done)  { setLiveUrl(ev.url); setStatus("live") }
+          if (ev.error) { setError(ev.error); setStatus("error") }
+        } catch { /* skip */ }
+      }
+    }
   }
 
-  function reset() { setStatus("idle"); setAppName(""); setIdea(""); setSlug(""); setFiles({}); setLiveUrl(""); setError("") }
+  function reset() { setStatus("idle"); setAppName(""); setIdea(""); setSlug(""); setFiles({}); setLiveUrl(""); setError(""); setDeployLogs([]) }
 
   if (status === "idle") return (
     <div className="h-full overflow-y-auto">
@@ -168,12 +191,29 @@ function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
   )
 
   if (status === "deploying") return (
-    <div className="flex h-full flex-col items-center justify-center gap-6">
-      <div className="flex gap-1.5">{[0,1,2].map(i => <div key={i} className="h-2 w-2 rounded-full" style={{ background: "var(--green)", animation: `pulse-dot 1.2s ease ${i*0.2}s infinite` }} />)}</div>
-      <div className="text-center">
-        <p style={{ fontSize: "15px", fontWeight: 500, color: "var(--text-1)" }}>Deploying to VPS</p>
-        <p style={{ fontSize: "12px", color: "var(--text-3)", marginTop: "6px" }}>Installing packages · Starting PM2 · Updating nginx</p>
-        <p style={{ fontSize: "11px", color: "var(--text-4)", marginTop: "4px" }}>~30–60 seconds</p>
+    <div className="h-full overflow-y-auto px-6 py-8">
+      <div className="mx-auto max-w-xl">
+        <div className="mb-4 flex items-center gap-2">
+          <div className="flex gap-1">{[0,1,2].map(i => <div key={i} className="h-1.5 w-1.5 rounded-full" style={{ background: "var(--green)", animation: `pulse-dot 1.2s ease ${i*0.2}s infinite` }} />)}</div>
+          <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-1)" }}>Deploying to VPS</span>
+        </div>
+        <div className="overflow-hidden rounded-xl" style={{ background: "rgba(0,0,0,0.5)", border: "1px solid var(--border-subtle)" }}>
+          <div className="flex items-center gap-1.5 px-4 py-2.5" style={{ borderBottom: "1px solid var(--border-subtle)", background: "rgba(255,255,255,0.02)" }}>
+            <div className="h-2.5 w-2.5 rounded-full" style={{ background: "var(--red)" }} />
+            <div className="h-2.5 w-2.5 rounded-full" style={{ background: "var(--orange)" }} />
+            <div className="h-2.5 w-2.5 rounded-full" style={{ background: "var(--green)" }} />
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-4)", marginLeft: "8px" }}>forge deploy</span>
+          </div>
+          <div className="min-h-48 max-h-80 overflow-y-auto p-4">
+            {deployLogs.length === 0 ? (
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--text-4)" }}>Initialising…</span>
+            ) : deployLogs.map((line, i) => (
+              <div key={i} style={{ fontFamily: "var(--font-mono)", fontSize: "12px", color: line.startsWith("✓") ? "var(--green)" : line.startsWith("✗") ? "var(--red)" : line.startsWith("⚠") ? "var(--orange)" : "var(--text-2)", lineHeight: "1.7" }}>
+                {line}
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -225,6 +265,7 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
   const [reforgeStep, setReforgeStep] = useState("")
   const [reforgeProgress, setReforgeProgress] = useState(0)
   const [anthropicKey, setAnthropicKey] = useState("")
+  const [deployLogs, setDeployLogs] = useState<string[]>([])
 
   useEffect(() => {
     const k = localStorage.getItem("foundry-anthropic-key")

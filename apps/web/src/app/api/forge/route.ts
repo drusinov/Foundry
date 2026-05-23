@@ -130,7 +130,33 @@ STRICT RULES:
     delete files["next.config.ts"]
     delete files["next.config.mjs"]
 
-    return NextResponse.json({ slug, files })
+    // Generate a polished app description using Haiku (fast + cheap)
+    let appDescription = description
+    try {
+      const descRes = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type":      "application/json",
+          "x-api-key":         anthropicKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model:      "claude-haiku-4-5-20251001",
+          max_tokens: 60,
+          messages:   [{
+            role:    "user",
+            content: `Write a clear, attractive app store description in 12 words or less for this app. Return only the description, no quotes, no punctuation at the end.\n\nApp: "${description}"`,
+          }],
+        }),
+      })
+      if (descRes.ok) {
+        const descData = await descRes.json()
+        const generated = descData.content?.[0]?.text?.trim()
+        if (generated) appDescription = generated
+      }
+    } catch { /* non-fatal — use original description */ }
+
+    return NextResponse.json({ slug, files, description: appDescription })
   } catch (error) {
     console.error("[forge]", error instanceof Error ? error.message : error)
     return NextResponse.json({ error: "Forge generation failed" }, { status: 500 })

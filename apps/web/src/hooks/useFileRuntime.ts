@@ -1,37 +1,48 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 
 export type FileRuntime = {
-  fileTree: string[]
+  fileTree:        string[]
   keyFileContents: Record<string, string>
-  recentCommits: string[]
-  dependencies: Record<string, string>
+  recentCommits:   string[]
+  dependencies:    Record<string, string>
+  fetchedAt?:      string
 }
 
 const EMPTY: FileRuntime = {
-  fileTree: [],
-  keyFileContents: {},
-  recentCommits: [],
-  dependencies: {},
+  fileTree: [], keyFileContents: {}, recentCommits: [], dependencies: {},
 }
 
-export function useFileRuntime(): FileRuntime {
-  const [data, setData] = useState<FileRuntime>(EMPTY)
+const REFRESH_INTERVAL = 5 * 60 * 1000 // 5 minutes
 
-  useEffect(() => {
+export function useFileRuntime(): FileRuntime & { refresh: () => void; lastFetched: Date | null } {
+  const [data, setData]           = useState<FileRuntime>(EMPTY)
+  const [lastFetched, setLastFetched] = useState<Date | null>(null)
+
+  const refresh = useCallback(() => {
     fetch("/api/file-runtime")
-      .then((r) => r.json())
-      .then((json) => {
+      .then(r => r.json())
+      .then(json => {
         setData({
           fileTree:        json.fileTree        ?? [],
           keyFileContents: json.keyFileContents ?? {},
           recentCommits:   json.recentCommits   ?? [],
           dependencies:    json.dependencies    ?? {},
         })
+        setLastFetched(new Date())
       })
-      .catch((err) => console.error("[useFileRuntime]", err))
+      .catch(err => console.error("[useFileRuntime]", err))
   }, [])
 
-  return data
+  // Fetch on mount
+  useEffect(() => { refresh() }, [refresh])
+
+  // Auto-refresh every 5 minutes
+  useEffect(() => {
+    const interval = setInterval(refresh, REFRESH_INTERVAL)
+    return () => clearInterval(interval)
+  }, [refresh])
+
+  return { ...data, refresh, lastFetched }
 }
