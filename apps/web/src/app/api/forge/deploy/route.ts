@@ -96,7 +96,7 @@ export async function POST(request: Request) {
     name:        slug.replace(/-[a-z0-9]{4,}$/, "").replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
     slug, description: description ?? "", icon: icon ?? "",
     status:      "deploying", port, url, pm2Name, appDir,
-    mode:        "production", createdAt: new Date().toISOString(),
+    mode:        "dev", createdAt: new Date().toISOString(),
   }
   apps.push(newApp)
   writeRegistry(apps)
@@ -127,24 +127,14 @@ export async function POST(request: Request) {
         await runStreamed("npm", ["install", "--prefer-offline"], appDir, 90000, log)
         log("✓ Packages installed")
 
-        // 4 — Production build (streamed)
-        log("🔨 Building for production…")
-        await runStreamed("npm", ["run", "build"], appDir, 180000, log)
-        log("✓ Production build complete")
-
-        // Commit build
-        try {
-          execSync("git add -A && git commit -m 'Production build'", { cwd: appDir, stdio: "pipe" })
-        } catch { /* non-fatal */ }
-
-        // 5 — Start with PM2 in production mode
-        log("🚀 Starting app in production mode…")
+        // 4 — Start with PM2 in dev mode (production build is a separate step)
+        log("🚀 Starting app…")
         execSync(
-          `pm2 start ./node_modules/.bin/next --name ${pm2Name} -- start --port ${port}`,
+          `pm2 start ./node_modules/.bin/next --name ${pm2Name} -- dev --port ${port}`,
           { cwd: appDir, timeout: 15000, stdio: "pipe" },
         )
         execSync("pm2 save", { timeout: 5000, stdio: "pipe" })
-        log(`✓ App running on port ${port} (next start)`)
+        log(`✓ App started on port ${port}`)
 
         // 6 — nginx
         log("🌐 Updating nginx routing…")
@@ -153,7 +143,7 @@ export async function POST(request: Request) {
 
         // 7 — Mark running
         const updated = readRegistry().map(a =>
-          a.slug === slug ? { ...a, status: "running" as const, mode: "production" as const } : a
+          a.slug === slug ? { ...a, status: "running" as const, mode: "dev" as const } : a
         )
         writeRegistry(updated)
 

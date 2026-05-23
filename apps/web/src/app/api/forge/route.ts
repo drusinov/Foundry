@@ -115,9 +115,14 @@ STRICT RULES:
 
     let files: Record<string, string>
     try {
-      files = JSON.parse(cleaned)
+      // Robust extraction: strip fences, find outermost {} object
+      let jsonStr = cleaned.replace(/^```(?:json)?\s*/m, "").replace(/\s*```\s*$/m, "").trim()
+      const jStart = jsonStr.indexOf("{")
+      const jEnd   = jsonStr.lastIndexOf("}")
+      if (jStart === -1 || jEnd === -1) throw new Error("no JSON object")
+      files = JSON.parse(jsonStr.slice(jStart, jEnd + 1))
     } catch {
-      console.error("[forge] JSON parse failed. Raw:", rawContent.slice(0, 500))
+      console.error("[forge] JSON parse failed. Raw:", cleaned.slice(0, 500))
       return NextResponse.json({ error: "Claude returned malformed JSON. Try again." }, { status: 502 })
     }
 
