@@ -3,6 +3,19 @@ import fs from "node:fs"
 
 export const dynamic = "force-dynamic"
 
+// USD per 1M tokens (approximate — may vary)
+const PRICING: Record<string, { input: number; output: number }> = {
+  "claude-opus-4-6":           { input: 15,  output: 75  },
+  "claude-sonnet-4-6":         { input: 3,   output: 15  },
+  "claude-haiku-4-5-20251001": { input: 0.8, output: 4   },
+  "gpt-4.1-mini":              { input: 0.4, output: 1.6 },
+}
+
+function calcCost(model: string, inputTokens: number, outputTokens: number): number {
+  const p = PRICING[model] ?? { input: 3, output: 15 }
+  return (inputTokens * p.input + outputTokens * p.output) / 1_000_000
+}
+
 const CLAUDE_MODEL    = "claude-opus-4-5"
 const REGISTRY_PATH  = "/opt/foundry/forged-apps.json"
 
@@ -194,7 +207,13 @@ Rules:
       }
     } catch { /* non-fatal */ }
 
-    return NextResponse.json({ slug, files, description: appDescription, icon: appIcon })
+    // Estimate cost based on typical forge token usage
+    const estInputTokens  = 900 + Math.ceil(description.length / 4)
+    const estOutputTokens = 4500
+    const totalCostUSD = calcCost(CLAUDE_MODEL, estInputTokens, estOutputTokens)
+      + calcCost("claude-haiku-4-5-20251001", 400, 200)
+
+    return NextResponse.json({ slug, files, description: appDescription, icon: appIcon, cost: totalCostUSD })
   } catch (error) {
     console.error("[forge]", error instanceof Error ? error.message : error)
     return NextResponse.json({ error: "Forge generation failed" }, { status: 500 })

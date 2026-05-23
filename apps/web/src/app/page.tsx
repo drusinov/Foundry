@@ -21,6 +21,21 @@ type ForgeStatus = "idle" | "generating" | "generated" | "deploying" | "live" | 
 
 // ── Forge Tab ────────────────────────────────────────────────────────────────
 
+// ── Cost estimation ───────────────────────────────────────────────────────────
+const FORGE_PRICING = { input: 15, output: 75, systemTokens: 900, outputTokens: 4500 }
+
+function estimateForgeCost(prompt: string): number {
+  const inputTokens = FORGE_PRICING.systemTokens + Math.ceil(prompt.length / 4)
+  return (inputTokens * FORGE_PRICING.input + FORGE_PRICING.outputTokens * FORGE_PRICING.output) / 1_000_000
+}
+
+function fmtCost(usd: number): string {
+  if (usd < 0.001) return "<$0.001"
+  if (usd < 0.01)  return `$${usd.toFixed(3)}`
+  return `$${usd.toFixed(2)}`
+}
+
+
 function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
   const [appName, setAppName]         = useState("")
   const [idea, setIdea]               = useState("")
@@ -31,6 +46,8 @@ function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
   const [error, setError]             = useState("")
   const [anthropicKey, setAnthropicKey] = useState("")
   const [deployLogs, setDeployLogs] = useState<string[]>([])
+  const [openaiBalance, setOpenaiBalance] = useState<number | null>(null)
+  const [balanceLoading, setBalanceLoading] = useState(false)
   const [queue, setQueue]           = useState<{ id: string; appName: string; description: string }[]>([])
   const activeJobRef                 = useRef(false)
 
@@ -38,6 +55,24 @@ function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
     const k = localStorage.getItem("foundry-anthropic-key")
     if (k) setAnthropicKey(k)
   }, [])
+
+  async function fetchBalance() {
+    if (!anthropicKey.trim()) return
+    setBalanceLoading(true)
+    try {
+      const res = await fetch("/api/balance", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ openaiKey: "" }),
+      })
+      const data = await res.json()
+      if (data.openai?.available != null) setOpenaiBalance(data.openai.available)
+    } catch { /* non-fatal */ }
+    setBalanceLoading(false)
+  }
+
+  useEffect(() => {
+    if (anthropicKey) fetchBalance()
+  }, [anthropicKey])
 
   const templates = ["Dashboard with charts", "Markdown notes app", "Pomodoro timer", "URL shortener", "Personal kanban board", "JSON formatter tool"]
 
@@ -85,7 +120,7 @@ function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
     setStatus("deploying"); setDeployLogs([])
     const res = await fetch("/api/forge/deploy", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ slug, description: idea, files }),
+      body: JSON.stringify({ slug, description: idea, files, icon: undefined, cost: 0 }),
     })
     if (!res.ok || !res.body) { setError("Deploy request failed"); setStatus("error"); return }
 
@@ -138,12 +173,41 @@ function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
             <textarea value={idea} onChange={(e) => setIdea(e.target.value)} placeholder="Describe what the app should do…" rows={4}
               className="w-full resize-none bg-transparent px-4 pt-3 pb-2 outline-none" style={{ fontSize: "14px", lineHeight: "1.6", fontFamily: "var(--font-ui)" }} />
             <div className="flex items-center justify-between border-t px-4 py-3" style={{ borderColor: "var(--border-subtle)" }}>
-              <span style={{ fontSize: "12px", color: "var(--text-4)" }}>Git-versioned · VPS-deployed · managed by Foundry</span>
+              {/* Cost estimate */}
+              <div className="flex items-center gap-3">
+                {idea.trim() ? (
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-4)" }}>
+                    est. {fmtCost(estimateForgeCost(idea))} <span style={{ color: "var(--text-4)", opacity: 0.6 }}>(Opus)</span>
+                  </span>
+                ) : (
+                  <span style={{ fontSize: "11px", color: "var(--text-4)" }}>Git-versioned · VPS-deployed</span>
+                )}
+              </div>
               <button onClick={forge} disabled={!idea.trim()} className="rounded-lg px-4 py-1.5 text-[13px] font-medium"
                 style={{ background: idea.trim() ? "rgba(167,139,250,0.15)" : "transparent", border: `1px solid ${idea.trim() ? "rgba(167,139,250,0.3)" : "var(--border-subtle)"}`, color: idea.trim() ? "var(--forge)" : "var(--text-4)", cursor: idea.trim() ? "pointer" : "not-allowed" }}>
                 {queue.length > 0 ? `Queue (${queue.length + 1})` : "Forge App →"}
               </button>
             </div>
+            {/* Balance strip */}
+            {anthropicKey && (
+              <div className="flex items-center gap-4 border-t px-4 py-2" style={{ borderColor: "var(--border-subtle)", background: "rgba(255,255,255,0.01)" }}>
+                <span style={{ fontSize: "10px", color: "var(--text-4)", letterSpacing: "0.06em", textTransform: "uppercase" }}>Balance</span>
+                ({anthropicKey && (
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: openaiBalance !== null ? "var(--text-2)" : "var(--text-4)" }}>
+                    OpenAI: {balanceLoading ? "…" : openaiBalance !== null ? `$${openaiBalance.toFixed(2)}` : "—"}
+                  </span>
+                )}
+                {anthropicKey && (
+                  <a href="https://console.anthropic.com/settings/billing" target="_blank" rel="noopener noreferrer"
+                    style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-4)" }}>
+                    Anthropic ↗
+                  </a>
+                )}
+                ({anthropicKey && (
+                  <button onClick={fetchBalance} style={{ fontSize: "10px", color: "var(--text-4)", marginLeft: "auto" }}>↺ refresh</button>
+                )}
+              </div>
+            )}
           </div>
           <div className="mt-5">
             <p style={{ fontSize: "11px", letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-4)", marginBottom: "10px" }}>Quickstart</p>
@@ -323,6 +387,8 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
   const [reforgeProgress, setReforgeProgress] = useState(0)
   const [anthropicKey, setAnthropicKey] = useState("")
   const [deployLogs, setDeployLogs] = useState<string[]>([])
+  const [openaiBalance, setOpenaiBalance] = useState<number | null>(null)
+  const [balanceLoading, setBalanceLoading] = useState(false)
   const [queue, setQueue]           = useState<{ id: string; appName: string; description: string }[]>([])
   const activeJobRef                 = useRef(false)
 
@@ -525,6 +591,7 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
                         <p style={{ fontSize: "10px", color: "var(--text-4)", fontFamily: "var(--font-mono)", marginTop: "4px" }}>
                           Released {new Date(app.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
                           {" · "}:{app.port}
+                          {(app as AppWithMode & { cost?: number }).cost ? ` · ${fmtCost((app as AppWithMode & { cost?: number }).cost!)} forged` : ""}
                         </p>
                       </div>
                       {app.status === "running" ? (

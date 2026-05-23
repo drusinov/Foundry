@@ -18,7 +18,7 @@ type ForgedApp = {
   id: string; name: string; slug: string; description: string; icon?: string
   status: "deploying" | "running" | "stopped" | "error"
   port: number; url: string; pm2Name: string; appDir: string
-  mode: "dev" | "production"; createdAt: string
+  mode: "dev" | "production"; createdAt: string; cost?: number
 }
 
 function readRegistry(): ForgedApp[] {
@@ -76,9 +76,9 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null)
   if (!body) return NextResponse.json({ error: "Invalid body" }, { status: 400 })
 
-  const { slug, description, files, icon } = body as {
+  const { slug, description, files, icon, cost } = body as {
     slug: string; description: string
-    files: Record<string, string>; icon?: string
+    files: Record<string, string>; icon?: string; cost?: number
   }
 
   if (!slug || !files || Object.keys(files).length === 0) {
@@ -94,7 +94,7 @@ export async function POST(request: Request) {
   const newApp: ForgedApp = {
     id:          `app_${Date.now().toString(36)}`,
     name:        slug.replace(/-[a-z0-9]{4,}$/, "").replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
-    slug, description: description ?? "", icon: icon ?? "",
+    slug, description: description ?? "", icon: icon ?? "", cost: cost ?? 0,
     status:      "deploying", port, url, pm2Name, appDir,
     mode:        "dev", createdAt: new Date().toISOString(),
   }
