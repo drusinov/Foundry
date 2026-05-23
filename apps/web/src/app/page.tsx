@@ -312,12 +312,9 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
   const [editSlug, setEditSlug]   = useState<string | null>(null)
   const [logsSlug, setLogsSlug]   = useState<string | null>(null)
   const [logsText, setLogsText]   = useState<Record<string, string>>({})
-  const [buildingSlug, setBuildingSlug]     = useState<string | null>(null)
   const [historySlug, setHistorySlug]       = useState<string | null>(null)
   const [commits, setCommits]               = useState<Record<string, { hash: string; short: string; message: string; date: string }[]>>({})
   const [rollingBack, setRollingBack]       = useState<string | null>(null)
-  const [subdomainSlug, setSubdomainSlug]   = useState<string | null>(null)
-  const [subdomainStatus, setSubdomainStatus] = useState<Record<string, "idle" | "loading" | "done" | "error">>({})
   const [editIdea, setEditIdea]   = useState("")
   const [reforging, setReforging] = useState(false)
   const [reforgeError, setReforgeError] = useState("")
@@ -353,17 +350,6 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
     setCommits(prev => ({ ...prev, [slug]: [] })) // force refetch
   }
 
-  async function enableSubdomain(slug: string) {
-    setSubdomainStatus(prev => ({ ...prev, [slug]: "loading" }))
-    const res = await fetch(`/api/apps/${slug}/subdomain`, { method: "POST" })
-    const data = await res.json()
-    if (data.success) {
-      setSubdomainStatus(prev => ({ ...prev, [slug]: "done" }))
-      setApps(prev => prev.map(a => a.slug === slug ? { ...a, subdomainUrl: data.url } : a))
-    } else {
-      setSubdomainStatus(prev => ({ ...prev, [slug]: "error" }))
-    }
-  }
 
   async function deleteApp(slug: string) {
     await fetch("/api/apps", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slug }) })
@@ -379,15 +365,6 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
     setLogsText(prev => ({ ...prev, [slug]: data.logs ?? "No logs available." }))
   }
 
-  async function buildApp(slug: string) {
-    setBuildingSlug(slug)
-    const res = await fetch(`/api/apps/${slug}/build`, { method: "POST" })
-    const data = await res.json()
-    if (data.success) {
-      setApps(prev => prev.map(a => a.slug === slug ? { ...a, mode: "production" } : a))
-    }
-    setBuildingSlug(null)
-  }
 
   async function reforgeApp() {
     if (!editIdea.trim() || !editSlug) return
@@ -465,15 +442,14 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
 
         <div className="space-y-3">
           {apps.map((app) => {
-            const statusColor   = app.status === "running" ? "var(--green)" : app.status === "deploying" ? "var(--orange)" : app.status === "error" ? "var(--red)" : "var(--text-4)"
-            const isEditing     = editSlug === app.slug
-            const isShowingLogs = logsSlug === app.slug
-            const isBuilding    = buildingSlug === app.slug
-            const isProduction  = app.mode === "production"
+            const statusColor = app.status === "running" ? "var(--green)" : app.status === "deploying" ? "var(--orange)" : app.status === "error" ? "var(--red)" : "var(--text-4)"
+            const isEditing   = editSlug === app.slug
+            const isProduction = (app as AppWithMode).mode === "production"
 
             return (
               <div key={app.id} className="overflow-hidden rounded-2xl" style={{ background: "var(--bg-raised)", border: "1px solid var(--border-subtle)" }}>
-                {/* App store style header */}
+
+                {/* App store card */}
                 <div className="flex gap-3 p-4">
                   {/* Icon */}
                   <div className="h-16 w-16 shrink-0 overflow-hidden rounded-2xl" style={{ border: "1px solid var(--border-subtle)" }}>
@@ -518,177 +494,109 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
                   </div>
                 </div>
 
-                {/* Action toolbar */}
-                <div className="flex items-center gap-1 border-t px-3 py-2 flex-wrap" style={{ borderColor: "var(--border-subtle)", background: "rgba(255,255,255,0.015)" }}>
-                  {[
-                    { label: "Edit",    active: isEditing,             onClick: () => { setEditSlug(isEditing ? null : app.slug); setEditIdea(""); setReforgeError("") } },
-                    { label: "Logs",    active: isShowingLogs,         onClick: () => fetchLogs(app.slug) },
-                    { label: "History", active: historySlug===app.slug, onClick: () => fetchCommits(app.slug) },
-                  ].map(({ label, active, onClick }) => (
-                    <button key={label} onClick={onClick}
-                      className="rounded-lg px-2.5 py-1 text-[11px]"
-                      style={{ background: active ? "rgba(99,153,255,0.1)" : "transparent", border: `1px solid ${active ? "rgba(99,153,255,0.25)" : "transparent"}`, color: active ? "var(--blue)" : "var(--text-3)", cursor: "pointer" }}>
-                      {label}
-                    </button>
-                  ))}
-                  <div style={{ flex: 1 }} />
-                  {!(app as AppWithMode).subdomainUrl && (
-                    <button onClick={() => enableSubdomain(app.slug)} disabled={subdomainStatus[app.slug] === "loading"}
-                      className="rounded-lg px-2.5 py-1 text-[11px]"
-                      style={{ background: "transparent", border: "1px solid transparent", color: subdomainStatus[app.slug] === "error" ? "var(--red)" : "var(--text-4)", cursor: "pointer" }}
-                      title="Requires *.drusinov.eu DNS wildcard">
-                      {subdomainStatus[app.slug] === "loading" ? "Enabling…" : subdomainStatus[app.slug] === "error" ? "DNS not ready" : "↗ Subdomain"}
-                    </button>
-                  )}
-                  {(app as AppWithMode).subdomainUrl && (
-                    <a href={(app as AppWithMode).subdomainUrl} target="_blank" rel="noopener noreferrer"
-                      style={{ fontSize: "10px", color: "var(--cyan)", fontFamily: "var(--font-mono)" }}>
-                      {(app as AppWithMode).subdomainUrl}
-                    </a>
-                  )}
-                  {!isProduction && (
-                    <button onClick={() => buildApp(app.slug)} disabled={isBuilding}
-                      className="rounded-lg px-2.5 py-1 text-[11px] font-medium"
-                      style={{ background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.2)", color: isBuilding ? "var(--text-4)" : "var(--green)", cursor: isBuilding ? "not-allowed" : "pointer" }}>
-                      {isBuilding ? "Building…" : "Build → Prod"}
-                    </button>
-                  )}
+                {/* Action bar — just Edit and Remove */}
+                <div className="flex items-center justify-between border-t px-4 py-2" style={{ borderColor: "var(--border-subtle)", background: "rgba(255,255,255,0.015)" }}>
+                  <button
+                    onClick={() => { setEditSlug(isEditing ? null : app.slug); setEditIdea(""); setReforgeError(""); setLogsSlug(null); setHistorySlug(null) }}
+                    className="rounded-lg px-3 py-1.5 text-[12px] font-medium"
+                    style={{ background: isEditing ? "rgba(99,153,255,0.1)" : "transparent", border: `1px solid ${isEditing ? "rgba(99,153,255,0.25)" : "transparent"}`, color: isEditing ? "var(--blue)" : "var(--text-3)", cursor: "pointer" }}>
+                    {isEditing ? "Close ✕" : "Edit"}
+                  </button>
                   <button onClick={() => deleteApp(app.slug)}
-                    className="rounded-lg px-2.5 py-1 text-[11px]"
-                    style={{ background: "transparent", border: "1px solid transparent", color: "var(--red)", cursor: "pointer" }}>
+                    className="rounded-lg px-3 py-1.5 text-[12px]"
+                    style={{ background: "transparent", color: "var(--red)", cursor: "pointer", border: "1px solid transparent" }}>
                     Remove
                   </button>
                 </div>
 
-                {/* Edit panel */}
+                {/* Edit panel — with Logs and History as secondary sections */}
                 {isEditing && (
-                  <div className="border-t px-4 py-4" style={{ borderColor: "var(--border-subtle)", background: "rgba(99,153,255,0.03)" }}>
+                  <div className="border-t" style={{ borderColor: "var(--border-subtle)" }}>
+                    {/* Re-forge form */}
                     {reforging ? (
-                      /* ── Progress view ── */
-                      <div className="py-2">
+                      <div className="px-4 py-4">
                         <div className="mb-3 flex items-center justify-between">
                           <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--forge)" }}>
                             {reforgeProgress === 100 ? "✓ Done" : "⚡ Re-forging…"}
                           </span>
-                          <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-4)" }}>
-                            {reforgeProgress}%
-                          </span>
+                          <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-4)" }}>{reforgeProgress}%</span>
                         </div>
-                        {/* Progress bar */}
                         <div className="relative h-1 w-full overflow-hidden rounded-full" style={{ background: "var(--bg-overlay)" }}>
-                          <div
-                            className="h-full rounded-full"
-                            style={{
-                              width: `${reforgeProgress}%`,
-                              background: reforgeProgress === 100
-                                ? "var(--green)"
-                                : "linear-gradient(90deg, var(--forge), #60a5fa)",
-                              transition: "width 600ms cubic-bezier(0.4,0,0.2,1)",
-                              boxShadow: "0 0 8px rgba(167,139,250,0.5)",
-                            }}
-                          />
+                          <div className="h-full rounded-full" style={{
+                            width: `${reforgeProgress}%`,
+                            background: reforgeProgress === 100 ? "var(--green)" : "linear-gradient(90deg, var(--forge), #60a5fa)",
+                            transition: "width 600ms cubic-bezier(0.4,0,0.2,1)",
+                            boxShadow: "0 0 8px rgba(167,139,250,0.5)",
+                          }} />
                         </div>
-                        {/* Step label */}
-                        <p style={{ fontSize: "11px", color: "var(--text-3)", marginTop: "10px" }}>
-                          {reforgeStep}
-                        </p>
+                        <p style={{ fontSize: "11px", color: "var(--text-3)", marginTop: "10px" }}>{reforgeStep}</p>
                       </div>
                     ) : (
-                      /* ── Edit form ── */
-                      <>
+                      <div className="px-4 py-4" style={{ background: "rgba(99,153,255,0.02)" }}>
                         <p style={{ fontSize: "11px", color: "var(--text-3)", marginBottom: "10px" }}>
                           Describe what you want to change — Claude reads the existing code and only modifies what's needed.
                         </p>
-                        <textarea value={editIdea} onChange={(e) => setEditIdea(e.target.value)} rows={3} placeholder="What should change…"
-                          className="w-full resize-none rounded-xl bg-transparent px-3 py-2.5 outline-none"
+                        <textarea value={editIdea} onChange={(e) => setEditIdea(e.target.value)} rows={2}
+                          placeholder="What should change…" className="w-full resize-none rounded-xl bg-transparent px-3 py-2.5 outline-none"
                           style={{ fontSize: "13px", fontFamily: "var(--font-ui)", color: "var(--text-1)", background: "var(--bg-overlay)", border: "1px solid var(--border)", lineHeight: "1.5" }} />
                         {reforgeError && <p style={{ fontSize: "11px", color: "var(--red)", marginTop: "6px" }}>{reforgeError}</p>}
                         <div className="mt-3 flex justify-end gap-2">
                           <button onClick={() => setEditSlug(null)} className="rounded-lg px-3 py-1.5 text-[12px]"
-                            style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)", color: "var(--text-3)" }}>Cancel</button>
+                            style={{ border: "1px solid var(--border-subtle)", color: "var(--text-3)" }}>Cancel</button>
                           <button onClick={reforgeApp} disabled={!editIdea.trim()} className="rounded-lg px-4 py-1.5 text-[12px] font-medium"
                             style={{ background: "rgba(167,139,250,0.14)", border: "1px solid rgba(167,139,250,0.28)", color: "var(--forge)", cursor: editIdea.trim() ? "pointer" : "not-allowed" }}>
                             ⚡ Re-forge
                           </button>
                         </div>
-                      </>
+                      </div>
                     )}
-                  </div>
-                )}
 
-                {/* Logs panel */}
-                {isShowingLogs && (
-                  <div className="border-t" style={{ borderColor: "var(--border-subtle)" }}>
-                    <div className="flex items-center justify-between px-4 py-2" style={{ background: "rgba(0,0,0,0.2)", borderBottom: "1px solid var(--border-subtle)" }}>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-4)" }}>PM2 · {app.pm2Name}</span>
-                      <button onClick={() => fetchLogs(app.slug)} style={{ fontSize: "10px", color: "var(--text-4)" }}>↺ refresh</button>
+                    {/* Logs section */}
+                    <div className="border-t" style={{ borderColor: "var(--border-subtle)" }}>
+                      <button onClick={() => fetchLogs(app.slug)}
+                        className="flex w-full items-center justify-between px-4 py-2.5"
+                        style={{ background: logsSlug === app.slug ? "rgba(0,0,0,0.2)" : "transparent", cursor: "pointer" }}>
+                        <span style={{ fontSize: "11px", color: "var(--text-3)" }}>Runtime logs</span>
+                        <span style={{ fontSize: "10px", color: "var(--text-4)" }}>{logsSlug === app.slug ? "▲" : "▼"}</span>
+                      </button>
+                      {logsSlug === app.slug && (
+                        <pre className="max-h-48 overflow-y-auto px-4 py-3" style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: "11px", lineHeight: "1.6", color: "var(--text-2)", background: "rgba(0,0,0,0.3)", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+                          {logsText[app.slug] ?? "Loading…"}
+                        </pre>
+                      )}
                     </div>
-                    <pre className="max-h-56 overflow-y-auto px-4 py-3" style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: "11px", lineHeight: "1.6", color: "var(--text-2)", background: "rgba(0,0,0,0.3)", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
-                      {logsText[app.slug] ?? "Loading…"}
-                    </pre>
-                  </div>
-                )}
 
-                {/* History panel */}
-                {historySlug === app.slug && (
-                  <div className="border-t" style={{ borderColor: "var(--border-subtle)" }}>
-                    <div className="flex items-center justify-between px-4 py-2" style={{ background: "rgba(0,0,0,0.2)", borderBottom: "1px solid var(--border-subtle)" }}>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-4)" }}>Git history</span>
-                      <button onClick={() => fetchCommits(app.slug)} style={{ fontSize: "10px", color: "var(--text-4)" }}>↺ refresh</button>
-                    </div>
-                    <div className="max-h-48 overflow-y-auto" style={{ background: "rgba(0,0,0,0.2)" }}>
-                      {(commits[app.slug] ?? []).length === 0 ? (
-                        <p className="px-4 py-3" style={{ fontSize: "11px", color: "var(--text-4)" }}>No commits found.</p>
-                      ) : (commits[app.slug] ?? []).map(commit => (
-                        <div key={commit.hash} className="flex items-center justify-between gap-2 px-4 py-2.5" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
-                          <div className="min-w-0">
-                            <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--cyan)" }}>{commit.short}</span>
-                            <span style={{ fontSize: "11px", color: "var(--text-2)", marginLeft: "8px" }}>{commit.message}</span>
-                            <span style={{ fontSize: "10px", color: "var(--text-4)", marginLeft: "8px" }}>{commit.date}</span>
-                          </div>
-                          <button
-                            onClick={() => rollbackTo(app.slug, commit.hash)}
-                            disabled={rollingBack === commit.hash}
-                            className="shrink-0 rounded-md px-2.5 py-1 text-[10px]"
-                            style={{ background: "rgba(251,146,60,0.08)", border: "1px solid rgba(251,146,60,0.2)", color: rollingBack === commit.hash ? "var(--text-4)" : "var(--orange)", cursor: rollingBack === commit.hash ? "not-allowed" : "pointer" }}>
-                            {rollingBack === commit.hash ? "Restoring…" : "Restore"}
-                          </button>
+                    {/* History section */}
+                    <div className="border-t" style={{ borderColor: "var(--border-subtle)" }}>
+                      <button onClick={() => fetchCommits(app.slug)}
+                        className="flex w-full items-center justify-between px-4 py-2.5"
+                        style={{ background: historySlug === app.slug ? "rgba(0,0,0,0.2)" : "transparent", cursor: "pointer" }}>
+                        <span style={{ fontSize: "11px", color: "var(--text-3)" }}>Version history</span>
+                        <span style={{ fontSize: "10px", color: "var(--text-4)" }}>{historySlug === app.slug ? "▲" : "▼"}</span>
+                      </button>
+                      {historySlug === app.slug && (
+                        <div className="max-h-48 overflow-y-auto" style={{ background: "rgba(0,0,0,0.2)" }}>
+                          {(commits[app.slug] ?? []).length === 0 ? (
+                            <p className="px-4 py-3" style={{ fontSize: "11px", color: "var(--text-4)" }}>No commits found.</p>
+                          ) : (commits[app.slug] ?? []).map(commit => (
+                            <div key={commit.hash} className="flex items-center justify-between gap-2 px-4 py-2.5" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+                              <div className="min-w-0">
+                                <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--cyan)" }}>{commit.short}</span>
+                                <span style={{ fontSize: "11px", color: "var(--text-2)", marginLeft: "8px" }}>{commit.message}</span>
+                                <span style={{ fontSize: "10px", color: "var(--text-4)", marginLeft: "8px" }}>{commit.date}</span>
+                              </div>
+                              <button onClick={() => rollbackTo(app.slug, commit.hash)} disabled={rollingBack === commit.hash}
+                                className="shrink-0 rounded-md px-2.5 py-1 text-[10px]"
+                                style={{ background: "rgba(251,146,60,0.08)", border: "1px solid rgba(251,146,60,0.2)", color: rollingBack === commit.hash ? "var(--text-4)" : "var(--orange)", cursor: rollingBack === commit.hash ? "not-allowed" : "pointer" }}>
+                                {rollingBack === commit.hash ? "Restoring…" : "Restore"}
+                              </button>
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      )}
                     </div>
                   </div>
                 )}
-
-                {/* Footer */}
-                <div className="flex items-center gap-2 flex-wrap border-t px-4 py-2.5" style={{ borderColor: "var(--border-subtle)" }}>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-4)" }}>:{app.port}</span>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-4)" }}>{isProduction ? "next start" : "next dev"}</span>
-                  <div style={{ marginLeft: "auto" }} className="flex items-center gap-2 flex-wrap">
-                    {!(app as AppWithMode & { subdomainUrl?: string }).subdomainUrl && (
-                      <button
-                        onClick={() => enableSubdomain(app.slug)}
-                        disabled={subdomainStatus[app.slug] === "loading"}
-                        className="rounded-md px-2.5 py-1 text-[10px]"
-                        style={{ background: "rgba(100,210,255,0.06)", border: "1px solid rgba(100,210,255,0.15)", color: subdomainStatus[app.slug] === "loading" ? "var(--text-4)" : "var(--cyan)", cursor: subdomainStatus[app.slug] === "loading" ? "not-allowed" : "pointer" }}
-                        title="Requires *.drusinov.eu DNS wildcard to be configured">
-                        {subdomainStatus[app.slug] === "loading" ? "Enabling…" : subdomainStatus[app.slug] === "error" ? "DNS not ready" : "Enable subdomain"}
-                      </button>
-                    )}
-                    {(app as AppWithMode & { subdomainUrl?: string }).subdomainUrl && (
-                      <a href={(app as AppWithMode & { subdomainUrl?: string }).subdomainUrl} target="_blank" rel="noopener noreferrer"
-                        style={{ fontSize: "10px", color: "var(--cyan)", fontFamily: "var(--font-mono)" }}>
-                        {(app as AppWithMode & { subdomainUrl?: string }).subdomainUrl}
-                      </a>
-                    )}
-                    {!isProduction && (
-                      <button onClick={() => buildApp(app.slug)} disabled={isBuilding}
-                        className="rounded-md px-2.5 py-1 text-[10px] font-medium"
-                        style={{ background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.2)", color: isBuilding ? "var(--text-4)" : "var(--green)", cursor: isBuilding ? "not-allowed" : "pointer" }}>
-                        {isBuilding ? "Building…" : "Build → Prod"}
-                      </button>
-                    )}
-                  </div>
-                </div>
               </div>
             )
           })}
