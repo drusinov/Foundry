@@ -194,7 +194,7 @@ type ExtendedEvent = {
   pipeline?: string; usage?: AiUsage
 }
 
-export function OperationalChat() {
+export function OperationalChat({ keyStatus }: { keyStatus?: { openai: boolean; anthropic: boolean } }) {
   const { latestCheckpoint, operationalEvents, appendOperationalEvent } = useInteraction()
   const gitRuntime    = useGitRuntime()
   const fileRuntime   = useFileRuntime()

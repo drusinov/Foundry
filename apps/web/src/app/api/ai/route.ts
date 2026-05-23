@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server"
 
+import { getSession } from "@/lib/auth"
+import { userDb } from "@/lib/db"
+
 export const dynamic = "force-dynamic"
 
 const OPENAI_STRUCTURER = `
@@ -44,7 +47,13 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null)
   if (!body) return NextResponse.json({ error: "Invalid body" }, { status: 400 })
 
-  const { openaiKey, anthropicKey, prompt, model = "claude-sonnet-4-6" } = body
+  const { prompt, model = "claude-sonnet-4-6" } = body
+
+  // Keys from DB
+  const session = await getSession()
+  const dbUser  = session ? await userDb.findById(session.userId) : null
+  const openaiKey    = dbUser?.openai_key    ?? ""
+  const anthropicKey = dbUser?.anthropic_key ?? ""
 
   if (!prompt) return NextResponse.json({ error: "Prompt required" }, { status: 400 })
 
@@ -52,7 +61,7 @@ export async function POST(request: Request) {
   const hasAnthropic = typeof anthropicKey === "string" && anthropicKey.trim().length > 0
 
   if (!hasOpenAI && !hasAnthropic) {
-    return NextResponse.json({ error: "At least one API key required" }, { status: 400 })
+    return NextResponse.json({ error: "No API keys configured. Add them in account settings." }, { status: 400 })
   }
 
   const stream = new ReadableStream({

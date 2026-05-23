@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server"
+import { getSession } from "@/lib/auth"
+import { userDb } from "@/lib/db"
 import fs from "node:fs"
 import path from "node:path"
 
@@ -46,10 +48,17 @@ function readExistingFiles(appDir: string): Record<string, string> {
 
 export async function POST(request: Request) {
   try {
-    const { slug, description, anthropicKey } = await request.json()
+    const { slug, description } = await request.json()
 
-    if (!slug || !description || !anthropicKey) {
-      return NextResponse.json({ error: "slug, description and anthropicKey are required" }, { status: 400 })
+    const session = await getSession()
+    const dbUser  = session ? await userDb.findById(session.userId) : null
+    const anthropicKey = dbUser?.anthropic_key ?? ""
+
+    if (!slug || !description) {
+      return NextResponse.json({ error: "slug and description required" }, { status: 400 })
+    }
+    if (!anthropicKey) {
+      return NextResponse.json({ error: "No Anthropic key configured." }, { status: 400 })
     }
 
     const appDir = path.join(APPS_DIR, slug)

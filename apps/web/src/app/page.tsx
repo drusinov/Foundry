@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 import { AppShell }               from "@/components/layout/AppShell"
 import { CommandPalette }         from "@/components/command/CommandPalette"
 import { OperationalChat }        from "@/components/system/OperationalChat"
@@ -760,21 +761,91 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
 
 // ── Page shell ────────────────────────────────────────────────────────────────
 
+type UserInfo = {
+  id: string; name: string; email: string; role: string
+  hasOpenaiKey: boolean; hasAnthropicKey: boolean
+}
+type UserRecord = { id: string; name: string; email: string; role: string; hasOpenaiKey: boolean; hasAnthropicKey: boolean; createdAt: string }
+
 function FoundryPage() {
   useCommandRuntime()
   useCommandPaletteKeyboard()
+  const router = useRouter()
   const { commandPaletteOpen } = useInteraction()
-  const [activeTab, setActiveTab] = useState<Tab>("runtime")
+  const [activeTab, setActiveTab]     = useState<Tab>("forge")
+  const [user, setUser]               = useState<UserInfo | null>(null)
+  const [showUserMenu, setShowUserMenu] = useState(false)
+  const [showAddUser, setShowAddUser] = useState(false)
+  const [users, setUsers]             = useState<UserRecord[]>([])
+  const [newUser, setNewUser]         = useState({ name: "", email: "", password: "", role: "user" })
+  const [addUserError, setAddUserError] = useState("")
+  const [keyPanel, setKeyPanel]       = useState(false)
+  const [openaiInput, setOpenaiInput] = useState("")
+  const [anthropicInput, setAnthropicInput] = useState("")
+  const [keySaving, setKeySaving]     = useState(false)
 
-  const tabs: { id: Tab; label: string; symbol: string }[] = [
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d) { router.push("/login"); return }
+        setUser(d)
+        if (d.role === "admin") setActiveTab("runtime")
+      })
+  }, [router])
+
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" })
+    router.push("/login")
+  }
+
+  async function loadUsers() {
+    const res = await fetch("/api/users")
+    if (res.ok) setUsers(await res.json())
+  }
+
+  async function addUser() {
+    setAddUserError("")
+    const res  = await fetch("/api/auth/register", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(newUser),
+    })
+    const data = await res.json()
+    if (!res.ok) { setAddUserError(data.error ?? "Failed"); return }
+    setNewUser({ name: "", email: "", password: "", role: "user" })
+    setShowAddUser(false)
+    loadUsers()
+  }
+
+  async function deleteUser(id: string) {
+    await fetch("/api/users", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) })
+    loadUsers()
+  }
+
+  async function saveKeys() {
+    setKeySaving(true)
+    const res  = await fetch("/api/auth/keys", {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ openaiKey: openaiInput || undefined, anthropicKey: anthropicInput || undefined }),
+    })
+    const data = await res.json()
+    if (data.ok) setUser(prev => prev ? { ...prev, hasOpenaiKey: data.hasOpenaiKey, hasAnthropicKey: data.hasAnthropicKey } : prev)
+    setOpenaiInput(""); setAnthropicInput(""); setKeySaving(false); setKeyPanel(false)
+  }
+
+  const allTabs: { id: Tab; label: string; symbol: string }[] = [
     { id: "runtime", label: "Foundry Runtime", symbol: "🔥" },
     { id: "forge",   label: "Forge",           symbol: "⚒️" },
     { id: "apps",    label: "Apps",            symbol: "⚔️" },
   ]
+  const tabs = allTabs.filter(t => t.id !== "runtime" || user?.role === "admin")
+
+  const initials = user?.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase() ?? "?"
 
   return (
     <AppShell>
       <div className="flex h-screen flex-col overflow-hidden">
+        {/* Tab bar */}
         <div className="flex h-10 shrink-0 items-center px-4 gap-1"
           style={{ background: "var(--bg-raised)", borderBottom: "1px solid var(--border-subtle)" }}>
           {tabs.map(({ id, label, symbol }) => {
@@ -790,10 +861,120 @@ function FoundryPage() {
               </button>
             )
           })}
+
+          {/* User avatar */}
+          <div className="relative ml-auto">
+            <button onClick={() => { setShowUserMenu(v => !v); if (!users.length && user?.role === "admin") loadUsers() }}
+              className="flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-semibold"
+              style={{ background: "rgba(99,153,255,0.15)", border: "1px solid rgba(99,153,255,0.3)", color: "var(--blue)" }}>
+              {initials}
+            </button>
+
+            {showUserMenu && (
+              <div className="absolute right-0 top-9 z-50 w-72 overflow-hidden rounded-2xl shadow-2xl"
+                style={{ background: "var(--bg-raised)", border: "1px solid var(--border)" }}>
+                {/* User info */}
+                <div className="px-4 py-3 border-b" style={{ borderColor: "var(--border-subtle)" }}>
+                  <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-1)" }}>{user?.name}</p>
+                  <p style={{ fontSize: "11px", color: "var(--text-4)" }}>{user?.email}</p>
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full" style={{ background: user?.hasOpenaiKey ? "var(--green)" : "rgba(74,222,128,0.2)", border: user?.hasOpenaiKey ? "none" : "1px solid rgba(74,222,128,0.4)" }} />
+                    <span style={{ fontSize: "10px", color: "var(--text-4)" }}>OpenAI</span>
+                    <span className="h-2 w-2 rounded-full ml-2" style={{ background: user?.hasAnthropicKey ? "var(--forge)" : "rgba(167,139,250,0.2)", border: user?.hasAnthropicKey ? "none" : "1px solid rgba(167,139,250,0.4)" }} />
+                    <span style={{ fontSize: "10px", color: "var(--text-4)" }}>Anthropic</span>
+                  </div>
+                </div>
+
+                {/* Key update */}
+                <div className="border-b" style={{ borderColor: "var(--border-subtle)" }}>
+                  <button onClick={() => setKeyPanel(v => !v)}
+                    className="flex w-full items-center justify-between px-4 py-2.5"
+                    style={{ fontSize: "12px", color: "var(--text-2)", cursor: "pointer" }}>
+                    <span>API Keys</span>
+                    <span style={{ color: "var(--text-4)", fontSize: "10px" }}>{keyPanel ? "▲" : "▼"}</span>
+                  </button>
+                  {keyPanel && (
+                    <div className="px-4 pb-3">
+                      <input value={openaiInput} onChange={e => setOpenaiInput(e.target.value)}
+                        placeholder={user?.hasOpenaiKey ? "Replace OpenAI key…" : "Add OpenAI key…"}
+                        type="password" className="w-full rounded-lg bg-transparent px-3 py-2 mb-2 outline-none"
+                        style={{ fontSize: "12px", fontFamily: "var(--font-mono)", color: "var(--text-2)", border: "1px solid var(--border-subtle)" }} />
+                      <input value={anthropicInput} onChange={e => setAnthropicInput(e.target.value)}
+                        placeholder={user?.hasAnthropicKey ? "Replace Anthropic key…" : "Add Anthropic key…"}
+                        type="password" className="w-full rounded-lg bg-transparent px-3 py-2 mb-2 outline-none"
+                        style={{ fontSize: "12px", fontFamily: "var(--font-mono)", color: "var(--text-2)", border: "1px solid var(--border-subtle)" }} />
+                      <button onClick={saveKeys} disabled={keySaving || (!openaiInput && !anthropicInput)}
+                        className="w-full rounded-lg py-1.5 text-[12px] font-medium"
+                        style={{ background: "rgba(99,153,255,0.12)", border: "1px solid rgba(99,153,255,0.25)", color: "var(--blue)", cursor: "pointer" }}>
+                        {keySaving ? "Saving…" : "Save keys"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Admin: Users panel */}
+                {user?.role === "admin" && (
+                  <div className="border-b" style={{ borderColor: "var(--border-subtle)" }}>
+                    <button onClick={() => setShowAddUser(v => !v)}
+                      className="flex w-full items-center justify-between px-4 py-2.5"
+                      style={{ fontSize: "12px", color: "var(--text-2)", cursor: "pointer" }}>
+                      <span>Users ({users.length})</span>
+                      <span style={{ color: "var(--forge)", fontSize: "11px" }}>+ Add</span>
+                    </button>
+                    {/* User list */}
+                    <div className="max-h-40 overflow-y-auto">
+                      {users.map(u => (
+                        <div key={u.id} className="flex items-center justify-between px-4 py-2"
+                          style={{ borderTop: "1px solid var(--border-subtle)" }}>
+                          <div>
+                            <p style={{ fontSize: "12px", color: "var(--text-1)" }}>{u.name}</p>
+                            <p style={{ fontSize: "10px", color: "var(--text-4)" }}>{u.email} · {u.role}</p>
+                          </div>
+                          {u.id !== user.id && (
+                            <button onClick={() => deleteUser(u.id)}
+                              style={{ fontSize: "11px", color: "var(--red)", cursor: "pointer" }}>✕</button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    {/* Add user form */}
+                    {showAddUser && (
+                      <div className="px-4 pb-3 pt-2" style={{ borderTop: "1px solid var(--border-subtle)", background: "rgba(167,139,250,0.03)" }}>
+                        {["name", "email", "password"].map(field => (
+                          <input key={field} value={newUser[field as keyof typeof newUser]} type={field === "password" ? "password" : "text"}
+                            onChange={e => setNewUser(p => ({ ...p, [field]: e.target.value }))}
+                            placeholder={field.charAt(0).toUpperCase() + field.slice(1)}
+                            className="w-full rounded-lg bg-transparent px-3 py-2 mb-2 outline-none"
+                            style={{ fontSize: "12px", color: "var(--text-1)", border: "1px solid var(--border-subtle)" }} />
+                        ))}
+                        <select value={newUser.role} onChange={e => setNewUser(p => ({ ...p, role: e.target.value }))}
+                          className="w-full rounded-lg px-3 py-2 mb-2 outline-none"
+                          style={{ fontSize: "12px", color: "var(--text-1)", background: "var(--bg-overlay)", border: "1px solid var(--border-subtle)" }}>
+                          <option value="user">User</option>
+                          <option value="admin">Admin</option>
+                        </select>
+                        {addUserError && <p style={{ fontSize: "11px", color: "var(--red)", marginBottom: "6px" }}>{addUserError}</p>}
+                        <button onClick={addUser} className="w-full rounded-lg py-1.5 text-[12px] font-medium"
+                          style={{ background: "rgba(167,139,250,0.12)", border: "1px solid rgba(167,139,250,0.25)", color: "var(--forge)", cursor: "pointer" }}>
+                          Create account
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Logout */}
+                <button onClick={logout} className="flex w-full items-center px-4 py-2.5"
+                  style={{ fontSize: "12px", color: "var(--red)", cursor: "pointer" }}>
+                  Sign out
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="flex flex-1 overflow-hidden">
-          {activeTab === "runtime" && <div className="flex min-w-0 flex-1 flex-col overflow-hidden"><OperationalChat /></div>}
+          {activeTab === "runtime" && <div className="flex min-w-0 flex-1 flex-col overflow-hidden"><OperationalChat keyStatus={{ openai: !!user?.hasOpenaiKey, anthropic: !!user?.hasAnthropicKey }} /></div>}
           {activeTab === "forge"   && <div className="flex-1 overflow-hidden"><ForgeTab onOpenApps={() => setActiveTab("apps")} /></div>}
           {activeTab === "apps"    && <div className="flex-1 overflow-hidden"><AppsTab onOpenForge={() => setActiveTab("forge")} /></div>}
         </div>

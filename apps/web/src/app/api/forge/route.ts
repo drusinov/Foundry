@@ -1,20 +1,10 @@
 import { NextResponse } from "next/server"
 import fs from "node:fs"
 
+import { getSession } from "@/lib/auth"
+import { userDb } from "@/lib/db"
+
 export const dynamic = "force-dynamic"
-
-// USD per 1M tokens (approximate — may vary)
-const PRICING: Record<string, { input: number; output: number }> = {
-  "claude-opus-4-6":           { input: 15,  output: 75  },
-  "claude-sonnet-4-6":         { input: 3,   output: 15  },
-  "claude-haiku-4-5-20251001": { input: 0.8, output: 4   },
-  "gpt-4.1-mini":              { input: 0.4, output: 1.6 },
-}
-
-function calcCost(model: string, inputTokens: number, outputTokens: number): number {
-  const p = PRICING[model] ?? { input: 3, output: 15 }
-  return (inputTokens * p.input + outputTokens * p.output) / 1_000_000
-}
 
 const CLAUDE_MODEL    = "claude-opus-4-5"
 const REGISTRY_PATH  = "/opt/foundry/forged-apps.json"
@@ -30,14 +20,17 @@ Example response format:
 `.trim()
 
 function slugify(text: string): string {
-  return text
+  const s = text
     .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9\s-]/g, "")
     .trim()
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-")
-    .slice(0, 48)
-    .replace(/-+$/, "") || "app"
+    .slice(0, 40)
+    .replace(/-+$/, "")
+  return s.length >= 2 ? s : "app"
 }
 
 function uniqueSlug(base: string): string {
@@ -59,13 +52,17 @@ function uniqueSlug(base: string): string {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { description, name, anthropicKey } = body
+    const { description, name } = body
+
+    const session = await getSession()
+    const dbUser  = session ? await userDb.findById(session.userId) : null
+    const anthropicKey = dbUser?.anthropic_key ?? ""
 
     if (!description || typeof description !== "string") {
       return NextResponse.json({ error: "Description is required" }, { status: 400 })
     }
-    if (!anthropicKey || typeof anthropicKey !== "string") {
-      return NextResponse.json({ error: "Anthropic API key is required" }, { status: 400 })
+    if (!anthropicKey) {
+      return NextResponse.json({ error: "No Anthropic key configured. Add it in account settings." }, { status: 400 })
     }
 
     // Use explicit name for slug if provided, otherwise derive from description
@@ -207,13 +204,7 @@ Rules:
       }
     } catch { /* non-fatal */ }
 
-    // Estimate cost based on typical forge token usage
-    const estInputTokens  = 900 + Math.ceil(description.length / 4)
-    const estOutputTokens = 4500
-    const totalCostUSD = calcCost(CLAUDE_MODEL, estInputTokens, estOutputTokens)
-      + calcCost("claude-haiku-4-5-20251001", 400, 200)
-
-    return NextResponse.json({ slug, files, description: appDescription, icon: appIcon, cost: totalCostUSD })
+    return NextResponse.json({ slug, files, description: appDescription, icon: appIcon })
   } catch (error) {
     console.error("[forge]", error instanceof Error ? error.message : error)
     return NextResponse.json({ error: "Forge generation failed" }, { status: 500 })
