@@ -1,27 +1,29 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { AppShell } from "@/components/layout/AppShell"
-import { CommandPalette } from "@/components/command/CommandPalette"
-import { OperationalChat } from "@/components/system/OperationalChat"
-import { StatusRail } from "@/components/system/StatusRail"
-import { useCommandRuntime } from "@/core/registry/use-command-runtime"
+import { AppShell }               from "@/components/layout/AppShell"
+import { CommandPalette }         from "@/components/command/CommandPalette"
+import { OperationalChat }        from "@/components/system/OperationalChat"
+import { StatusRail }             from "@/components/system/StatusRail"
+import { useCommandRuntime }      from "@/core/registry/use-command-runtime"
 import { InteractionProvider, useInteraction } from "@/core/state/interaction-store"
 import { useCommandPaletteKeyboard } from "@/hooks/useCommandPaletteKeyboard"
 
+// ── Types ────────────────────────────────────────────────────────────────────
+
 type Tab = "runtime" | "forge" | "apps"
+
+type ForgeStatus = "idle" | "generating" | "generated" | "deploying" | "live" | "error"
 
 type ForgedApp = {
   id: string; name: string; slug: string; description: string
   status: "deploying" | "running" | "stopped" | "error"
   port: number; url: string; pm2Name: string; createdAt: string
+  mode?: "dev" | "production"; icon?: string; cost?: number
 }
 
-type ForgeStatus = "idle" | "generating" | "generated" | "deploying" | "live" | "error"
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-// ── Forge Tab ────────────────────────────────────────────────────────────────
-
-// ── Cost estimation ───────────────────────────────────────────────────────────
 const FORGE_PRICING = { input: 15, output: 75, systemTokens: 900, outputTokens: 4500 }
 
 function estimateForgeCost(prompt: string): number {
@@ -35,65 +37,75 @@ function fmtCost(usd: number): string {
   return `$${usd.toFixed(2)}`
 }
 
+function slugGradient(slug: string) {
+  let h = 0
+  for (let i = 0; i < slug.length; i++) h = (h * 31 + slug.charCodeAt(i)) >>> 0
+  const a = h % 360, b = (a + 130) % 360
+  return `linear-gradient(135deg, hsl(${a},55%,22%), hsl(${b},60%,32%))`
+}
+
+// ── Forge Tab ─────────────────────────────────────────────────────────────────
 
 function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
-  const [appName, setAppName]         = useState("")
-  const [idea, setIdea]               = useState("")
-  const [status, setStatus]           = useState<ForgeStatus>("idle")
-  const [slug, setSlug]               = useState("")
-  const [files, setFiles]             = useState<Record<string, string>>({})
-  const [liveUrl, setLiveUrl]         = useState("")
-  const [error, setError]             = useState("")
-  const [anthropicKey, setAnthropicKey] = useState("")
+  const [appName, setAppName]   = useState("")
+  const [idea, setIdea]         = useState("")
+  const [status, setStatus]     = useState<ForgeStatus>("idle")
+  const [slug, setSlug]         = useState("")
+  const [files, setFiles]       = useState<Record<string, string>>({})
+  const [liveUrl, setLiveUrl]   = useState("")
+  const [error, setError]       = useState("")
   const [deployLogs, setDeployLogs] = useState<string[]>([])
-  const [openaiBalance, setOpenaiBalance] = useState<number | null>(null)
+  const [anthropicKey, setAnthropicKey] = useState("")
+  const [balance, setBalance]   = useState<number | null>(null)
   const [balanceLoading, setBalanceLoading] = useState(false)
-  const [queue, setQueue]           = useState<{ id: string; appName: string; description: string }[]>([])
-  const activeJobRef                 = useRef(false)
+  const [queue, setQueue]       = useState<{ id: string; appName: string; description: string }[]>([])
+  const activeJobRef             = useRef(false)
+
+  const templates = [
+    "Dashboard with charts", "Markdown notes app", "Pomodoro timer",
+    "URL shortener", "Personal kanban board", "JSON formatter tool",
+  ]
 
   useEffect(() => {
     const k = localStorage.getItem("foundry-anthropic-key")
     if (k) setAnthropicKey(k)
   }, [])
 
+  useEffect(() => {
+    if (anthropicKey) fetchBalance()
+  }, [anthropicKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
   async function fetchBalance() {
     if (!anthropicKey.trim()) return
     setBalanceLoading(true)
     try {
-      const res = await fetch("/api/balance", {
+      const res  = await fetch("/api/balance", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ openaiKey: "" }),
       })
       const data = await res.json()
-      if (data.openai?.available != null) setOpenaiBalance(data.openai.available)
+      if (data.openai?.available != null) setBalance(data.openai.available)
     } catch { /* non-fatal */ }
     setBalanceLoading(false)
   }
 
-  useEffect(() => {
-    if (anthropicKey) fetchBalance()
-  }, [anthropicKey])
-
-  const templates = ["Dashboard with charts", "Markdown notes app", "Pomodoro timer", "URL shortener", "Personal kanban board", "JSON formatter tool"]
-
-  // Add current form to queue (or start immediately if idle)
   function enqueue() {
     if (!idea.trim()) return
     if (!anthropicKey) { setError("Anthropic key not set — add it in the Runtime tab."); setStatus("error"); return }
     const job = { id: crypto.randomUUID(), appName: appName.trim(), description: idea.trim() }
-    setQueue(prev => [...prev, job])
+    const next = [...queue, job]
+    setQueue(next)
     setAppName(""); setIdea("")
-    if (!activeJobRef.current) processQueue([...queue, job])
+    if (!activeJobRef.current) processQueue(next)
   }
 
-  // Process queue sequentially
-  async function processQueue(currentQueue: { id: string; appName: string; description: string }[]) {
-    const job = currentQueue.find(j => true) // take first
+  async function processQueue(q: typeof queue) {
+    const job = q[0]
     if (!job) { activeJobRef.current = false; return }
     activeJobRef.current = true
-
     setStatus("generating"); setError("")
-    const res = await fetch("/api/forge", {
+
+    const res  = await fetch("/api/forge", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ description: job.description, name: job.appName || undefined, anthropicKey }),
     })
@@ -108,19 +120,15 @@ function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
     setSlug(data.slug); setFiles(data.files)
     if (data.description) setIdea(data.description)
     setStatus("generated")
-    // Remove processed job from queue
     setQueue(prev => prev.slice(1))
     activeJobRef.current = false
   }
-
-  // Keep forge() as alias for backward compat in the form
-  const forge = enqueue
 
   async function deploy() {
     setStatus("deploying"); setDeployLogs([])
     const res = await fetch("/api/forge/deploy", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ slug, description: idea, files, icon: undefined, cost: 0 }),
+      body: JSON.stringify({ slug, description: idea, files }),
     })
     if (!res.ok || !res.body) { setError("Deploy request failed"); setStatus("error"); return }
 
@@ -141,123 +149,23 @@ function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
           if (ev.log)   setDeployLogs(prev => [...prev, ev.log])
           if (ev.done)  { setLiveUrl(ev.url); setStatus("live") }
           if (ev.error) { setError(ev.error); setStatus("error") }
-        } catch { /* skip */ }
+        } catch { /* skip malformed */ }
       }
     }
   }
 
-  function reset() { setStatus("idle"); setAppName(""); setIdea(""); setSlug(""); setFiles({}); setLiveUrl(""); setError(""); setDeployLogs([]) }
+  function reset() {
+    setStatus("idle"); setAppName(""); setIdea(""); setSlug("")
+    setFiles({}); setLiveUrl(""); setError(""); setDeployLogs([])
+  }
 
-  if (status === "idle") return (
-    <div className="h-full overflow-y-auto">
-      <div className="forge-canvas min-h-full flex flex-col items-center justify-start px-6 py-12">
-        <div className="w-full max-w-xl">
-          <div className="mb-8 text-center">
-            <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-2xl text-lg" style={{ background: "rgba(167,139,250,0.15)", border: "1px solid rgba(167,139,250,0.25)" }}>⚡</div>
-            <h1 className="mt-3 text-xl font-semibold" style={{ color: "var(--text-1)" }}>Forge</h1>
-            <p className="mt-1.5" style={{ fontSize: "13px", color: "var(--text-3)", lineHeight: "1.6" }}>Describe an app. Foundry builds it, deploys it to your VPS, and manages it.</p>
-          </div>
-          <div className="overflow-hidden rounded-2xl" style={{ background: "var(--bg-overlay)", border: "1px solid var(--border)" }}>
-            {/* App name */}
-            <div className="flex items-center gap-2 border-b px-4 py-3" style={{ borderColor: "var(--border-subtle)" }}>
-              <span style={{ fontSize: "11px", color: "var(--text-4)", whiteSpace: "nowrap" }}>App name</span>
-              <input
-                value={appName}
-                onChange={(e) => setAppName(e.target.value)}
-                placeholder="e.g. Pomodoro Timer"
-                className="flex-1 bg-transparent outline-none"
-                style={{ fontSize: "13px", fontFamily: "var(--font-ui)", color: "var(--text-1)" }}
-              />
-            </div>
-            {/* Prompt */}
-            <textarea value={idea} onChange={(e) => setIdea(e.target.value)} placeholder="Describe what the app should do…" rows={4}
-              className="w-full resize-none bg-transparent px-4 pt-3 pb-2 outline-none" style={{ fontSize: "14px", lineHeight: "1.6", fontFamily: "var(--font-ui)" }} />
-            <div className="flex items-center justify-between border-t px-4 py-3" style={{ borderColor: "var(--border-subtle)" }}>
-              {/* Cost estimate */}
-              <div className="flex items-center gap-3">
-                {idea.trim() ? (
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-4)" }}>
-                    est. {fmtCost(estimateForgeCost(idea))} <span style={{ color: "var(--text-4)", opacity: 0.6 }}>(Opus)</span>
-                  </span>
-                ) : (
-                  <span style={{ fontSize: "11px", color: "var(--text-4)" }}>Git-versioned · VPS-deployed</span>
-                )}
-              </div>
-              <button onClick={forge} disabled={!idea.trim()} className="rounded-lg px-4 py-1.5 text-[13px] font-medium"
-                style={{ background: idea.trim() ? "rgba(167,139,250,0.15)" : "transparent", border: `1px solid ${idea.trim() ? "rgba(167,139,250,0.3)" : "var(--border-subtle)"}`, color: idea.trim() ? "var(--forge)" : "var(--text-4)", cursor: idea.trim() ? "pointer" : "not-allowed" }}>
-                {queue.length > 0 ? `Queue (${queue.length + 1})` : "Forge App →"}
-              </button>
-            </div>
-            {/* Balance strip */}
-            {anthropicKey && (
-              <div className="flex items-center gap-4 border-t px-4 py-2" style={{ borderColor: "var(--border-subtle)", background: "rgba(255,255,255,0.01)" }}>
-                <span style={{ fontSize: "10px", color: "var(--text-4)", letterSpacing: "0.06em", textTransform: "uppercase" }}>Balance</span>
-                ({anthropicKey && (
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: openaiBalance !== null ? "var(--text-2)" : "var(--text-4)" }}>
-                    OpenAI: {balanceLoading ? "…" : openaiBalance !== null ? `$${openaiBalance.toFixed(2)}` : "—"}
-                  </span>
-                )}
-                {anthropicKey && (
-                  <a href="https://console.anthropic.com/settings/billing" target="_blank" rel="noopener noreferrer"
-                    style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-4)" }}>
-                    Anthropic ↗
-                  </a>
-                )}
-                ({anthropicKey && (
-                  <button onClick={fetchBalance} style={{ fontSize: "10px", color: "var(--text-4)", marginLeft: "auto" }}>↺ refresh</button>
-                )}
-              </div>
-            )}
-          </div>
-          <div className="mt-5">
-            <p style={{ fontSize: "11px", letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-4)", marginBottom: "10px" }}>Quickstart</p>
-            <div className="flex flex-wrap gap-2">
-              {templates.map((t) => (
-                <button key={t} onClick={() => setIdea(t)} className="rounded-lg px-3 py-1.5 text-[12px]"
-                  style={{ background: "var(--bg-raised)", border: "1px solid var(--border)", color: "var(--text-2)" }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--forge)"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(167,139,250,0.3)" }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--text-2)"; (e.currentTarget as HTMLElement).style.borderColor = "var(--border)" }}>
-                  {t}
-                </button>
-              ))}
-            </div>
-          </div>
-          {/* Queue display */}
-          {queue.length > 0 && (
-            <div className="mt-4 rounded-xl overflow-hidden" style={{ border: "1px solid var(--border-subtle)" }}>
-              <div className="px-4 py-2.5" style={{ background: "rgba(255,255,255,0.03)", borderBottom: "1px solid var(--border-subtle)" }}>
-                <span style={{ fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-4)" }}>
-                  Queue — {queue.length} pending
-                </span>
-              </div>
-              <div style={{ background: "var(--bg-raised)" }}>
-                {queue.map((job, i) => (
-                  <div key={job.id} className="flex items-center justify-between px-4 py-2.5" style={{ borderBottom: i < queue.length - 1 ? "1px solid var(--border-subtle)" : "none" }}>
-                    <div>
-                      <span style={{ fontSize: "12px", color: "var(--text-2)" }}>{job.appName || job.description.slice(0, 40)}</span>
-                      {i === 0 && <span className="ml-2 rounded px-1.5 py-0.5" style={{ fontSize: "9px", background: "rgba(167,139,250,0.1)", border: "1px solid rgba(167,139,250,0.2)", color: "var(--forge)" }}>next up</span>}
-                    </div>
-                    <button onClick={() => setQueue(prev => prev.filter(j => j.id !== job.id))}
-                      style={{ fontSize: "11px", color: "var(--text-4)" }}>✕</button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <button onClick={onOpenApps} className="mt-4 flex w-full items-center justify-between rounded-xl px-4 py-3"
-            style={{ background: "var(--bg-raised)", border: "1px solid var(--border-subtle)" }}>
-            <span style={{ fontSize: "13px", color: "var(--text-3)" }}>View forged apps</span>
-            <span style={{ fontSize: "12px", color: "var(--text-4)" }}>Apps →</span>
-          </button>
-        </div>
-      </div>
-    </div>
-  )
+  // ── Render states ─────────────────────────────────────────────────────────
 
   if (status === "generating") return (
     <div className="flex h-full flex-col items-center justify-center gap-6">
-      <div className="flex gap-1.5">{[0,1,2].map(i => <div key={i} className="h-2 w-2 rounded-full" style={{ background: "var(--forge)", animation: `pulse-dot 1.2s ease ${i*0.2}s infinite` }} />)}</div>
+      <div className="flex gap-1.5">
+        {[0,1,2].map(i => <div key={i} className="h-2 w-2 rounded-full" style={{ background: "var(--forge)", animation: `pulse-dot 1.2s ease ${i*0.2}s infinite` }} />)}
+      </div>
       <div className="text-center">
         <p style={{ fontSize: "15px", fontWeight: 500, color: "var(--text-1)" }}>Claude is building your app</p>
         <p style={{ fontSize: "12px", color: "var(--text-3)", marginTop: "6px" }}>Generating complete codebase…</p>
@@ -274,8 +182,10 @@ function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
             <p style={{ fontSize: "12px", color: "var(--text-3)", marginTop: "2px" }}>{Object.keys(files).length} files · ready to deploy</p>
           </div>
           <div className="flex gap-2">
-            <button onClick={reset} className="rounded-lg px-3 py-1.5 text-[12px]" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)", color: "var(--text-3)" }}>Start over</button>
-            <button onClick={deploy} className="rounded-lg px-4 py-1.5 text-[13px] font-medium" style={{ background: "rgba(74,222,128,0.12)", border: "1px solid rgba(74,222,128,0.25)", color: "var(--green)" }}>Deploy →</button>
+            <button onClick={reset} className="rounded-lg px-3 py-1.5 text-[12px]"
+              style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)", color: "var(--text-3)" }}>Start over</button>
+            <button onClick={deploy} className="rounded-lg px-4 py-1.5 text-[13px] font-medium"
+              style={{ background: "rgba(74,222,128,0.12)", border: "1px solid rgba(74,222,128,0.25)", color: "var(--green)" }}>Deploy →</button>
           </div>
         </div>
         <div className="mb-4 rounded-xl px-4 py-3" style={{ background: "var(--bg-raised)", border: "1px solid var(--border-subtle)" }}>
@@ -304,7 +214,9 @@ function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
     <div className="h-full overflow-y-auto px-6 py-8">
       <div className="mx-auto max-w-xl">
         <div className="mb-4 flex items-center gap-2">
-          <div className="flex gap-1">{[0,1,2].map(i => <div key={i} className="h-1.5 w-1.5 rounded-full" style={{ background: "var(--green)", animation: `pulse-dot 1.2s ease ${i*0.2}s infinite` }} />)}</div>
+          <div className="flex gap-1">
+            {[0,1,2].map(i => <div key={i} className="h-1.5 w-1.5 rounded-full" style={{ background: "var(--green)", animation: `pulse-dot 1.2s ease ${i*0.2}s infinite` }} />)}
+          </div>
           <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-1)" }}>Deploying to VPS</span>
         </div>
         <div className="overflow-hidden rounded-xl" style={{ background: "rgba(0,0,0,0.5)", border: "1px solid var(--border-subtle)" }}>
@@ -315,13 +227,15 @@ function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
             <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-4)", marginLeft: "8px" }}>forge deploy</span>
           </div>
           <div className="min-h-48 max-h-80 overflow-y-auto p-4">
-            {deployLogs.length === 0 ? (
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--text-4)" }}>Initialising…</span>
-            ) : deployLogs.map((line, i) => (
-              <div key={i} style={{ fontFamily: "var(--font-mono)", fontSize: "12px", color: line.startsWith("✓") ? "var(--green)" : line.startsWith("✗") ? "var(--red)" : line.startsWith("⚠") ? "var(--orange)" : "var(--text-2)", lineHeight: "1.7" }}>
-                {line}
-              </div>
-            ))}
+            {deployLogs.length === 0
+              ? <span style={{ fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--text-4)" }}>Initialising…</span>
+              : deployLogs.map((line, i) => (
+                <div key={i} style={{ fontFamily: "var(--font-mono)", fontSize: "12px", lineHeight: "1.7",
+                  color: line.startsWith("✓") ? "var(--green)" : line.startsWith("✗") ? "var(--red)" : line.startsWith("⚠") ? "var(--orange)" : "var(--text-2)" }}>
+                  {line}
+                </div>
+              ))
+            }
           </div>
         </div>
       </div>
@@ -330,7 +244,8 @@ function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
 
   if (status === "live") return (
     <div className="flex h-full flex-col items-center justify-center gap-6">
-      <div className="h-10 w-10 flex items-center justify-center rounded-2xl text-lg" style={{ background: "rgba(74,222,128,0.15)", border: "1px solid rgba(74,222,128,0.25)" }}>✓</div>
+      <div className="h-10 w-10 flex items-center justify-center rounded-2xl text-lg"
+        style={{ background: "rgba(74,222,128,0.15)", border: "1px solid rgba(74,222,128,0.25)" }}>✓</div>
       <div className="text-center">
         <p style={{ fontSize: "15px", fontWeight: 600, color: "var(--green)" }}>App is live</p>
         <p style={{ fontSize: "12px", color: "var(--text-3)", marginTop: "6px" }}>{slug}</p>
@@ -340,112 +255,190 @@ function ForgeTab({ onOpenApps }: { onOpenApps: () => void }) {
         Open app →
       </a>
       <div className="flex gap-2">
-        <button onClick={reset} className="rounded-lg px-3 py-1.5 text-[12px]" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)", color: "var(--text-3)" }}>Build another</button>
-        <button onClick={onOpenApps} className="rounded-lg px-3 py-1.5 text-[12px]" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)", color: "var(--text-3)" }}>View all apps</button>
+        <button onClick={reset} className="rounded-lg px-3 py-1.5 text-[12px]"
+          style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)", color: "var(--text-3)" }}>Build another</button>
+        <button onClick={onOpenApps} className="rounded-lg px-3 py-1.5 text-[12px]"
+          style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)", color: "var(--text-3)" }}>View all apps</button>
       </div>
     </div>
   )
 
-  return (
+  if (status === "error") return (
     <div className="flex h-full flex-col items-center justify-center gap-6 px-6">
-      <div className="h-10 w-10 flex items-center justify-center rounded-2xl" style={{ background: "rgba(248,113,113,0.12)", border: "1px solid rgba(248,113,113,0.25)", fontSize: "18px" }}>✗</div>
+      <div className="h-10 w-10 flex items-center justify-center rounded-2xl"
+        style={{ background: "rgba(248,113,113,0.12)", border: "1px solid rgba(248,113,113,0.25)", fontSize: "18px" }}>✗</div>
       <div className="text-center max-w-md">
         <p style={{ fontSize: "15px", fontWeight: 500, color: "var(--red)" }}>Something went wrong</p>
         <p style={{ fontSize: "12px", color: "var(--text-3)", marginTop: "6px", lineHeight: "1.6" }}>{error}</p>
       </div>
-      <button onClick={reset} className="rounded-lg px-4 py-1.5 text-[13px]" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)", color: "var(--text-2)" }}>Try again</button>
+      <button onClick={reset} className="rounded-lg px-4 py-1.5 text-[13px]"
+        style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)", color: "var(--text-2)" }}>Try again</button>
+    </div>
+  )
+
+  // Idle state
+  return (
+    <div className="h-full overflow-y-auto">
+      <div className="min-h-full flex flex-col items-center justify-start px-6 py-12">
+        <div className="w-full max-w-xl">
+          <div className="mb-8 text-center">
+            <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-2xl text-lg"
+              style={{ background: "rgba(167,139,250,0.15)", border: "1px solid rgba(167,139,250,0.25)" }}>⚡</div>
+            <h1 className="mt-3 text-xl font-semibold" style={{ color: "var(--text-1)" }}>Forge</h1>
+            <p className="mt-1.5" style={{ fontSize: "13px", color: "var(--text-3)", lineHeight: "1.6" }}>
+              Describe an app. Foundry builds it, deploys it to your VPS, and manages it.
+            </p>
+          </div>
+
+          <div className="overflow-hidden rounded-2xl" style={{ background: "var(--bg-overlay)", border: "1px solid var(--border)" }}>
+            {/* App name */}
+            <div className="flex items-center gap-2 border-b px-4 py-3" style={{ borderColor: "var(--border-subtle)" }}>
+              <span style={{ fontSize: "11px", color: "var(--text-4)", whiteSpace: "nowrap" }}>App name</span>
+              <input value={appName} onChange={e => setAppName(e.target.value)}
+                placeholder="e.g. Pomodoro Timer" className="flex-1 bg-transparent outline-none"
+                style={{ fontSize: "13px", fontFamily: "var(--font-ui)", color: "var(--text-1)" }} />
+            </div>
+
+            {/* Prompt */}
+            <textarea value={idea} onChange={e => setIdea(e.target.value)}
+              placeholder="Describe what the app should do…" rows={4}
+              className="w-full resize-none bg-transparent px-4 pt-3 pb-2 outline-none"
+              style={{ fontSize: "14px", lineHeight: "1.6", fontFamily: "var(--font-ui)" }} />
+
+            {/* Footer row: cost estimate + forge button */}
+            <div className="flex items-center justify-between border-t px-4 py-3" style={{ borderColor: "var(--border-subtle)" }}>
+              {idea.trim() ? (
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-4)" }}>
+                  est. {fmtCost(estimateForgeCost(idea))} <span style={{ opacity: 0.6 }}>(Opus)</span>
+                </span>
+              ) : (
+                <span style={{ fontSize: "11px", color: "var(--text-4)" }}>Git-versioned · VPS-deployed</span>
+              )}
+              <button onClick={enqueue} disabled={!idea.trim()} className="rounded-lg px-4 py-1.5 text-[13px] font-medium"
+                style={{ background: idea.trim() ? "rgba(167,139,250,0.15)" : "transparent",
+                  border: `1px solid ${idea.trim() ? "rgba(167,139,250,0.3)" : "var(--border-subtle)"}`,
+                  color: idea.trim() ? "var(--forge)" : "var(--text-4)", cursor: idea.trim() ? "pointer" : "not-allowed" }}>
+                {queue.length > 0 ? `Queue (${queue.length + 1})` : "Forge App →"}
+              </button>
+            </div>
+
+            {/* Balance strip */}
+            {anthropicKey && (
+              <div className="flex items-center gap-4 border-t px-4 py-2"
+                style={{ borderColor: "var(--border-subtle)", background: "rgba(255,255,255,0.01)" }}>
+                <span style={{ fontSize: "10px", color: "var(--text-4)", letterSpacing: "0.06em", textTransform: "uppercase" }}>Balance</span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: balance !== null ? "var(--text-2)" : "var(--text-4)" }}>
+                  OpenAI: {balanceLoading ? "…" : balance !== null ? `$${balance.toFixed(2)}` : "—"}
+                </span>
+                <a href="https://console.anthropic.com/settings/billing" target="_blank" rel="noopener noreferrer"
+                  style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-4)" }}>
+                  Anthropic ↗
+                </a>
+                <button onClick={fetchBalance} style={{ fontSize: "10px", color: "var(--text-4)", marginLeft: "auto" }}>↺</button>
+              </div>
+            )}
+          </div>
+
+          {/* Quickstart templates */}
+          <div className="mt-5">
+            <p style={{ fontSize: "11px", letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-4)", marginBottom: "10px" }}>Quickstart</p>
+            <div className="flex flex-wrap gap-2">
+              {templates.map(t => (
+                <button key={t} onClick={() => setIdea(t)} className="rounded-lg px-3 py-1.5 text-[12px]"
+                  style={{ background: "var(--bg-raised)", border: "1px solid var(--border)", color: "var(--text-2)" }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--forge)"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(167,139,250,0.3)" }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--text-2)"; (e.currentTarget as HTMLElement).style.borderColor = "var(--border)" }}>
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Queue */}
+          {queue.length > 0 && (
+            <div className="mt-4 rounded-xl overflow-hidden" style={{ border: "1px solid var(--border-subtle)" }}>
+              <div className="px-4 py-2.5" style={{ background: "rgba(255,255,255,0.03)", borderBottom: "1px solid var(--border-subtle)" }}>
+                <span style={{ fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-4)" }}>
+                  Queue — {queue.length} pending
+                </span>
+              </div>
+              {queue.map((job, i) => (
+                <div key={job.id} className="flex items-center justify-between px-4 py-2.5"
+                  style={{ background: "var(--bg-raised)", borderBottom: i < queue.length - 1 ? "1px solid var(--border-subtle)" : "none" }}>
+                  <div>
+                    <span style={{ fontSize: "12px", color: "var(--text-2)" }}>{job.appName || job.description.slice(0, 40)}</span>
+                    {i === 0 && <span className="ml-2 rounded px-1.5 py-0.5" style={{ fontSize: "9px", background: "rgba(167,139,250,0.1)", border: "1px solid rgba(167,139,250,0.2)", color: "var(--forge)" }}>next up</span>}
+                  </div>
+                  <button onClick={() => setQueue(prev => prev.filter(j => j.id !== job.id))}
+                    style={{ fontSize: "11px", color: "var(--text-4)" }}>✕</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <button onClick={onOpenApps} className="mt-4 flex w-full items-center justify-between rounded-xl px-4 py-3"
+            style={{ background: "var(--bg-raised)", border: "1px solid var(--border-subtle)" }}>
+            <span style={{ fontSize: "13px", color: "var(--text-3)" }}>View forged apps</span>
+            <span style={{ fontSize: "12px", color: "var(--text-4)" }}>Apps →</span>
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
 
-// ── Apps Tab ─────────────────────────────────────────────────────────────────
-
-type AppWithMode = ForgedApp & { mode?: "dev" | "production"; icon?: string; subdomainUrl?: string }
-
-// Deterministic gradient from slug string
-function slugGradient(slug: string) {
-  let h = 0
-  for (let i = 0; i < slug.length; i++) h = (h * 31 + slug.charCodeAt(i)) >>> 0
-  const a = h % 360, b = (a + 130) % 360
-  return `linear-gradient(135deg, hsl(${a},55%,22%), hsl(${b},60%,32%))`
-}
+// ── Apps Tab ──────────────────────────────────────────────────────────────────
 
 function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
-  const [apps, setApps]           = useState<AppWithMode[]>([])
-  const [loading, setLoading]     = useState(true)
-  const [editSlug, setEditSlug]   = useState<string | null>(null)
-  const [logsSlug, setLogsSlug]   = useState<string | null>(null)
-  const [logsText, setLogsText]   = useState<Record<string, string>>({})
-  const [historySlug, setHistorySlug]       = useState<string | null>(null)
-  const [commits, setCommits]               = useState<Record<string, { hash: string; short: string; message: string; date: string }[]>>({})
-  const [rollingBack, setRollingBack]       = useState<string | null>(null)
-  const [togglingSlug, setTogglingSlug]     = useState<string | null>(null)
-  const [editIdea, setEditIdea]   = useState("")
-  const [reforging, setReforging] = useState(false)
-  const [reforgeError, setReforgeError] = useState("")
-  const [reforgeStep, setReforgeStep] = useState("")
-  const [reforgeProgress, setReforgeProgress] = useState(0)
+  const [apps, setApps]         = useState<ForgedApp[]>([])
+  const [loading, setLoading]   = useState(true)
   const [anthropicKey, setAnthropicKey] = useState("")
-  const [deployLogs, setDeployLogs] = useState<string[]>([])
-  const [openaiBalance, setOpenaiBalance] = useState<number | null>(null)
-  const [balanceLoading, setBalanceLoading] = useState(false)
-  const [queue, setQueue]           = useState<{ id: string; appName: string; description: string }[]>([])
-  const activeJobRef                 = useRef(false)
+  const [editSlug, setEditSlug] = useState<string | null>(null)
+  const [editIdea, setEditIdea] = useState("")
+  const [reforging, setReforging]         = useState(false)
+  const [reforgeProgress, setReforgeProgress] = useState(0)
+  const [reforgeStep, setReforgeStep]     = useState("")
+  const [reforgeError, setReforgeError]   = useState("")
+  const [logsSlug, setLogsSlug] = useState<string | null>(null)
+  const [logsText, setLogsText] = useState<Record<string, string>>({})
+  const [historySlug, setHistorySlug] = useState<string | null>(null)
+  const [commits, setCommits]   = useState<Record<string, { hash: string; short: string; message: string; date: string }[]>>({})
+  const [rollingBack, setRollingBack] = useState<string | null>(null)
+  const [togglingSlug, setTogglingSlug] = useState<string | null>(null)
 
   useEffect(() => {
     const k = localStorage.getItem("foundry-anthropic-key")
     if (k) setAnthropicKey(k)
-    fetch("/api/apps").then(r => r.json()).then(d => { setApps(Array.isArray(d) ? d : []); setLoading(false) }).catch(() => setLoading(false))
+    fetch("/api/apps")
+      .then(r => r.json())
+      .then(d => { setApps(Array.isArray(d) ? d : []); setLoading(false) })
+      .catch(() => setLoading(false))
   }, [])
 
-  // Auto-generate icons for apps that don't have one yet
+  // Auto-generate icons for apps missing them
   useEffect(() => {
     if (!anthropicKey || apps.length === 0) return
-    const missing = apps.filter(a => !(a as AppWithMode).icon)
+    const missing = apps.filter(a => !a.icon)
     if (missing.length === 0) return
-    // Generate one at a time to avoid hammering the API
-    const generateNext = async (queue: typeof missing) => {
-      if (queue.length === 0) return
-      const [app, ...rest] = queue
+    const generateNext = async (q: typeof missing) => {
+      if (q.length === 0) return
+      const [app, ...rest] = q
       try {
-        const res = await fetch(`/api/apps/${app.slug}/icon`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
+        const res  = await fetch(`/api/apps/${app.slug}/icon`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ anthropicKey }),
         })
         const data = await res.json()
-        if (data.icon) {
-          setApps(prev => prev.map(a => a.slug === app.slug ? { ...a, icon: data.icon } as AppWithMode : a))
-        }
+        if (data.icon) setApps(prev => prev.map(a => a.slug === app.slug ? { ...a, icon: data.icon } : a))
       } catch { /* non-fatal */ }
       generateNext(rest)
     }
     generateNext(missing)
   }, [apps.length, anthropicKey])
 
-  async function fetchCommits(slug: string) {
-    if (historySlug === slug) { setHistorySlug(null); return }
-    setHistorySlug(slug)
-    if (commits[slug]) return // already loaded
-    const res = await fetch(`/api/apps/${slug}/commits`)
-    const data = await res.json()
-    setCommits(prev => ({ ...prev, [slug]: data.commits ?? [] }))
-  }
-
-  async function rollbackTo(slug: string, commit: string) {
-    setRollingBack(commit)
-    await fetch(`/api/apps/${slug}/rollback`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ commit }),
-    })
-    setRollingBack(null)
-    setCommits(prev => ({ ...prev, [slug]: [] })) // force refetch
-  }
-
-
   async function startApp(slug: string) {
     setTogglingSlug(slug)
-    const res = await fetch(`/api/apps/${slug}/start`, { method: "POST" })
+    const res  = await fetch(`/api/apps/${slug}/start`, { method: "POST" })
     const data = await res.json()
     if (data.success) setApps(prev => prev.map(a => a.slug === slug ? { ...a, status: "running" as const } : a))
     setTogglingSlug(null)
@@ -453,7 +446,7 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
 
   async function stopApp(slug: string) {
     setTogglingSlug(slug)
-    const res = await fetch(`/api/apps/${slug}/stop`, { method: "POST" })
+    const res  = await fetch(`/api/apps/${slug}/stop`, { method: "POST" })
     const data = await res.json()
     if (data.success) setApps(prev => prev.map(a => a.slug === slug ? { ...a, status: "stopped" as const } : a))
     setTogglingSlug(null)
@@ -467,45 +460,60 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
   async function fetchLogs(slug: string) {
     if (logsSlug === slug) { setLogsSlug(null); return }
     setLogsSlug(slug)
-    setLogsText(prev => ({ ...prev, [slug]: "Loading logs…" }))
-    const res = await fetch(`/api/apps/${slug}/logs`)
+    setLogsText(prev => ({ ...prev, [slug]: "Loading…" }))
+    const res  = await fetch(`/api/apps/${slug}/logs`)
     const data = await res.json()
     setLogsText(prev => ({ ...prev, [slug]: data.logs ?? "No logs available." }))
   }
 
+  async function fetchCommits(slug: string) {
+    if (historySlug === slug) { setHistorySlug(null); return }
+    setHistorySlug(slug)
+    if (commits[slug]) return
+    const res  = await fetch(`/api/apps/${slug}/commits`)
+    const data = await res.json()
+    setCommits(prev => ({ ...prev, [slug]: data.commits ?? [] }))
+  }
+
+  async function rollbackTo(slug: string, commit: string) {
+    setRollingBack(commit)
+    await fetch(`/api/apps/${slug}/rollback`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ commit }),
+    })
+    setRollingBack(null)
+    setCommits(prev => ({ ...prev, [slug]: [] }))
+  }
 
   async function reforgeApp() {
     if (!editIdea.trim() || !editSlug) return
     setReforging(true); setReforgeError(""); setReforgeProgress(0)
 
-    // Simulate progress stages — real steps take ~25s total
     const steps = [
-      { label: "Reading existing code…",     progress: 8,  delay: 0 },
-      { label: "Claude is rewriting…",        progress: 25, delay: 1200 },
-      { label: "Generating changes…",         progress: 55, delay: 6000 },
-      { label: "Finalising output…",          progress: 78, delay: 14000 },
-      { label: "Writing files to VPS…",       progress: 88, delay: 20000 },
-      { label: "Restarting app…",             progress: 95, delay: 24000 },
+      { label: "Reading existing code…",  progress: 8,  delay: 0 },
+      { label: "Claude is rewriting…",    progress: 25, delay: 1200 },
+      { label: "Generating changes…",     progress: 55, delay: 6000 },
+      { label: "Finalising output…",      progress: 78, delay: 14000 },
+      { label: "Writing files to VPS…",   progress: 88, delay: 20000 },
+      { label: "Restarting app…",         progress: 95, delay: 24000 },
     ]
-    const timers: ReturnType<typeof setTimeout>[] = []
-    steps.forEach(({ label, progress, delay }) => {
-      timers.push(setTimeout(() => { setReforgeStep(label); setReforgeProgress(progress) }, delay))
-    })
+    const timers = steps.map(({ label, progress, delay }) =>
+      setTimeout(() => { setReforgeStep(label); setReforgeProgress(progress) }, delay)
+    )
 
     try {
-      const genRes = await fetch("/api/forge/edit", {
+      const genRes  = await fetch("/api/forge/edit", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ slug: editSlug, description: editIdea, anthropicKey }),
       })
       const genData = await genRes.json()
       if (!genRes.ok || genData.error) {
-        timers.forEach(clearTimeout)
-        setReforgeError(genData.error ?? "Edit failed"); setReforging(false); return
+        timers.forEach(clearTimeout); setReforgeError(genData.error ?? "Edit failed"); setReforging(false); return
       }
 
       setReforgeStep("Applying changes…"); setReforgeProgress(88)
 
-      const updateRes = await fetch("/api/forge/update", {
+      const updateRes  = await fetch("/api/forge/update", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ slug: editSlug, files: genData.files }),
       })
@@ -518,20 +526,23 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
       setReforgeStep("Done"); setReforgeProgress(100)
       setTimeout(() => { setReforging(false); setEditSlug(null); setEditIdea(""); setReforgeProgress(0); setReforgeStep("") }, 800)
     } catch (err) {
-      timers.forEach(clearTimeout)
-      setReforgeError(String(err)); setReforging(false)
+      timers.forEach(clearTimeout); setReforgeError(String(err)); setReforging(false)
     }
   }
 
-  if (loading) return <div className="flex h-full items-center justify-center" style={{ fontSize: "13px", color: "var(--text-3)" }}>Loading apps…</div>
+  if (loading) return (
+    <div className="flex h-full items-center justify-center" style={{ fontSize: "13px", color: "var(--text-3)" }}>Loading apps…</div>
+  )
 
   if (apps.length === 0) return (
     <div className="flex h-full flex-col items-center justify-center px-6">
       <div className="w-full max-w-xl text-center">
-        <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-2xl text-lg" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid var(--border)" }}>□</div>
+        <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-2xl text-lg"
+          style={{ background: "rgba(255,255,255,0.05)", border: "1px solid var(--border)" }}>□</div>
         <h2 className="text-lg font-semibold" style={{ color: "var(--text-1)" }}>No apps forged yet</h2>
         <p className="mt-2" style={{ fontSize: "13px", color: "var(--text-3)", lineHeight: "1.6" }}>Use Forge to describe and deploy your first app.</p>
-        <button onClick={onOpenForge} className="mt-6 rounded-xl px-6 py-2.5 text-[13px] font-medium" style={{ background: "rgba(167,139,250,0.12)", border: "1px solid rgba(167,139,250,0.25)", color: "var(--forge)" }}>
+        <button onClick={onOpenForge} className="mt-6 rounded-xl px-6 py-2.5 text-[13px] font-medium"
+          style={{ background: "rgba(167,139,250,0.12)", border: "1px solid rgba(167,139,250,0.25)", color: "var(--forge)" }}>
           ⚡ Open Forge
         </button>
       </div>
@@ -543,32 +554,31 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
       <div className="mx-auto max-w-2xl">
         <div className="mb-6 flex items-center justify-between">
           <h2 style={{ fontSize: "15px", fontWeight: 600, color: "var(--text-1)" }}>Forged Apps</h2>
-          <button onClick={onOpenForge} className="rounded-lg px-3 py-1.5 text-[12px]" style={{ background: "rgba(167,139,250,0.1)", border: "1px solid rgba(167,139,250,0.2)", color: "var(--forge)" }}>
+          <button onClick={onOpenForge} className="rounded-lg px-3 py-1.5 text-[12px]"
+            style={{ background: "rgba(167,139,250,0.1)", border: "1px solid rgba(167,139,250,0.2)", color: "var(--forge)" }}>
             ⚡ New App
           </button>
         </div>
 
         <div className="space-y-3">
-          {apps.map((app) => {
-            const statusColor = app.status === "running" ? "var(--green)" : app.status === "deploying" ? "var(--orange)" : app.status === "error" ? "var(--red)" : "var(--text-4)"
-            const isEditing   = editSlug === app.slug
-            const isProduction = (app as AppWithMode).mode === "production"
+          {apps.map(app => {
+            const statusColor  = app.status === "running" ? "var(--green)" : app.status === "deploying" ? "var(--orange)" : app.status === "error" ? "var(--red)" : "var(--text-4)"
+            const isEditing    = editSlug === app.slug
+            const isProduction = app.mode === "production"
 
             return (
-              <div key={app.id} className="overflow-hidden rounded-2xl" style={{ background: "var(--bg-raised)", border: "1px solid var(--border-subtle)" }}>
+              <div key={app.id} className="overflow-hidden rounded-2xl"
+                style={{ background: "var(--bg-raised)", border: "1px solid var(--border-subtle)" }}>
 
-                {/* App store card */}
+                {/* Card header */}
                 <div className="flex gap-3 p-4">
                   {/* Icon */}
                   <div className="h-16 w-16 shrink-0 overflow-hidden rounded-2xl" style={{ border: "1px solid var(--border-subtle)" }}>
-                    {(app as AppWithMode).icon ? (
-                      <div dangerouslySetInnerHTML={{ __html: (app as AppWithMode).icon! }}
-                        style={{ width: "100%", height: "100%", display: "block" }} />
+                    {app.icon ? (
+                      <div dangerouslySetInnerHTML={{ __html: app.icon }} style={{ width: "100%", height: "100%", display: "block" }} />
                     ) : (
                       <div style={{ width: "100%", height: "100%", background: slugGradient(app.slug),
-                        display: "flex", alignItems: "center", justifyContent: "center", fontSize: "26px" }}>
-                        ⚡
-                      </div>
+                        display: "flex", alignItems: "center", justifyContent: "center", fontSize: "26px" }}>⚡</div>
                     )}
                   </div>
 
@@ -582,7 +592,10 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
                             {app.name || app.slug}
                           </span>
                           {isProduction && (
-                            <span className="rounded px-1.5 py-0.5" style={{ fontSize: "9px", fontFamily: "var(--font-mono)", background: "rgba(74,222,128,0.12)", border: "1px solid rgba(74,222,128,0.25)", color: "var(--green)", letterSpacing: "0.06em" }}>PROD</span>
+                            <span className="rounded px-1.5 py-0.5"
+                              style={{ fontSize: "9px", fontFamily: "var(--font-mono)", background: "rgba(74,222,128,0.12)", border: "1px solid rgba(74,222,128,0.25)", color: "var(--green)", letterSpacing: "0.06em" }}>
+                              PROD
+                            </span>
                           )}
                         </div>
                         <p style={{ fontSize: "12px", color: "var(--text-2)", lineHeight: "1.45" }}>
@@ -591,7 +604,7 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
                         <p style={{ fontSize: "10px", color: "var(--text-4)", fontFamily: "var(--font-mono)", marginTop: "4px" }}>
                           Released {new Date(app.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
                           {" · "}:{app.port}
-                          {(app as AppWithMode & { cost?: number }).cost ? ` · ${fmtCost((app as AppWithMode & { cost?: number }).cost!)} forged` : ""}
+                          {app.cost ? ` · ${fmtCost(app.cost)} forged` : ""}
                         </p>
                       </div>
                       {app.status === "running" ? (
@@ -611,40 +624,44 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
                 </div>
 
                 {/* Action bar */}
-                <div className="flex items-center justify-between border-t px-4 py-2" style={{ borderColor: "var(--border-subtle)", background: "rgba(255,255,255,0.015)" }}>
+                <div className="flex items-center justify-between border-t px-4 py-2"
+                  style={{ borderColor: "var(--border-subtle)", background: "rgba(255,255,255,0.015)" }}>
                   <div className="flex items-center gap-1">
-                    {/* Start / Stop toggle */}
                     {app.status === "running" ? (
                       <button onClick={() => stopApp(app.slug)} disabled={togglingSlug === app.slug}
                         className="rounded-lg px-3 py-1.5 text-[12px] font-medium"
-                        style={{ background: "rgba(251,146,60,0.08)", border: "1px solid rgba(251,146,60,0.2)", color: togglingSlug === app.slug ? "var(--text-4)" : "var(--orange)", cursor: togglingSlug === app.slug ? "not-allowed" : "pointer" }}>
+                        style={{ background: "rgba(251,146,60,0.08)", border: "1px solid rgba(251,146,60,0.2)",
+                          color: togglingSlug === app.slug ? "var(--text-4)" : "var(--orange)",
+                          cursor: togglingSlug === app.slug ? "not-allowed" : "pointer" }}>
                         {togglingSlug === app.slug ? "Stopping…" : "■ Stop"}
                       </button>
                     ) : (
                       <button onClick={() => startApp(app.slug)} disabled={togglingSlug === app.slug}
                         className="rounded-lg px-3 py-1.5 text-[12px] font-medium"
-                        style={{ background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.2)", color: togglingSlug === app.slug ? "var(--text-4)" : "var(--green)", cursor: togglingSlug === app.slug ? "not-allowed" : "pointer" }}>
+                        style={{ background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.2)",
+                          color: togglingSlug === app.slug ? "var(--text-4)" : "var(--green)",
+                          cursor: togglingSlug === app.slug ? "not-allowed" : "pointer" }}>
                         {togglingSlug === app.slug ? "Starting…" : "▶ Start"}
                       </button>
                     )}
                     <button
                       onClick={() => { setEditSlug(isEditing ? null : app.slug); setEditIdea(""); setReforgeError(""); setLogsSlug(null); setHistorySlug(null) }}
                       className="rounded-lg px-3 py-1.5 text-[12px]"
-                      style={{ background: isEditing ? "rgba(99,153,255,0.1)" : "transparent", border: `1px solid ${isEditing ? "rgba(99,153,255,0.25)" : "transparent"}`, color: isEditing ? "var(--blue)" : "var(--text-3)", cursor: "pointer" }}>
+                      style={{ background: isEditing ? "rgba(99,153,255,0.1)" : "transparent",
+                        border: `1px solid ${isEditing ? "rgba(99,153,255,0.25)" : "transparent"}`,
+                        color: isEditing ? "var(--blue)" : "var(--text-3)", cursor: "pointer" }}>
                       {isEditing ? "Close ✕" : "Edit"}
                     </button>
                   </div>
-                  <button onClick={() => deleteApp(app.slug)}
-                    className="rounded-lg px-3 py-1.5 text-[12px]"
+                  <button onClick={() => deleteApp(app.slug)} className="rounded-lg px-3 py-1.5 text-[12px]"
                     style={{ background: "transparent", color: "var(--red)", cursor: "pointer", border: "1px solid transparent" }}>
                     Remove
                   </button>
                 </div>
 
-                {/* Edit panel — with Logs and History as secondary sections */}
+                {/* Edit panel */}
                 {isEditing && (
                   <div className="border-t" style={{ borderColor: "var(--border-subtle)" }}>
-                    {/* Re-forge form */}
                     {reforging ? (
                       <div className="px-4 py-4">
                         <div className="mb-3 flex items-center justify-between">
@@ -668,7 +685,7 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
                         <p style={{ fontSize: "11px", color: "var(--text-3)", marginBottom: "10px" }}>
                           Describe what you want to change — Claude reads the existing code and only modifies what's needed.
                         </p>
-                        <textarea value={editIdea} onChange={(e) => setEditIdea(e.target.value)} rows={2}
+                        <textarea value={editIdea} onChange={e => setEditIdea(e.target.value)} rows={2}
                           placeholder="What should change…" className="w-full resize-none rounded-xl bg-transparent px-3 py-2.5 outline-none"
                           style={{ fontSize: "13px", fontFamily: "var(--font-ui)", color: "var(--text-1)", background: "var(--bg-overlay)", border: "1px solid var(--border)", lineHeight: "1.5" }} />
                         {reforgeError && <p style={{ fontSize: "11px", color: "var(--red)", marginTop: "6px" }}>{reforgeError}</p>}
@@ -676,14 +693,15 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
                           <button onClick={() => setEditSlug(null)} className="rounded-lg px-3 py-1.5 text-[12px]"
                             style={{ border: "1px solid var(--border-subtle)", color: "var(--text-3)" }}>Cancel</button>
                           <button onClick={reforgeApp} disabled={!editIdea.trim()} className="rounded-lg px-4 py-1.5 text-[12px] font-medium"
-                            style={{ background: "rgba(167,139,250,0.14)", border: "1px solid rgba(167,139,250,0.28)", color: "var(--forge)", cursor: editIdea.trim() ? "pointer" : "not-allowed" }}>
+                            style={{ background: "rgba(167,139,250,0.14)", border: "1px solid rgba(167,139,250,0.28)",
+                              color: "var(--forge)", cursor: editIdea.trim() ? "pointer" : "not-allowed" }}>
                             ⚡ Re-forge
                           </button>
                         </div>
                       </div>
                     )}
 
-                    {/* Logs section */}
+                    {/* Runtime logs */}
                     <div className="border-t" style={{ borderColor: "var(--border-subtle)" }}>
                       <button onClick={() => fetchLogs(app.slug)}
                         className="flex w-full items-center justify-between px-4 py-2.5"
@@ -692,13 +710,15 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
                         <span style={{ fontSize: "10px", color: "var(--text-4)" }}>{logsSlug === app.slug ? "▲" : "▼"}</span>
                       </button>
                       {logsSlug === app.slug && (
-                        <pre className="max-h-48 overflow-y-auto px-4 py-3" style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: "11px", lineHeight: "1.6", color: "var(--text-2)", background: "rgba(0,0,0,0.3)", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+                        <pre className="max-h-48 overflow-y-auto px-4 py-3"
+                          style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: "11px", lineHeight: "1.6",
+                            color: "var(--text-2)", background: "rgba(0,0,0,0.3)", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
                           {logsText[app.slug] ?? "Loading…"}
                         </pre>
                       )}
                     </div>
 
-                    {/* History section */}
+                    {/* Version history */}
                     <div className="border-t" style={{ borderColor: "var(--border-subtle)" }}>
                       <button onClick={() => fetchCommits(app.slug)}
                         className="flex w-full items-center justify-between px-4 py-2.5"
@@ -708,22 +728,26 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
                       </button>
                       {historySlug === app.slug && (
                         <div className="max-h-48 overflow-y-auto" style={{ background: "rgba(0,0,0,0.2)" }}>
-                          {(commits[app.slug] ?? []).length === 0 ? (
-                            <p className="px-4 py-3" style={{ fontSize: "11px", color: "var(--text-4)" }}>No commits found.</p>
-                          ) : (commits[app.slug] ?? []).map(commit => (
-                            <div key={commit.hash} className="flex items-center justify-between gap-2 px-4 py-2.5" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
-                              <div className="min-w-0">
-                                <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--cyan)" }}>{commit.short}</span>
-                                <span style={{ fontSize: "11px", color: "var(--text-2)", marginLeft: "8px" }}>{commit.message}</span>
-                                <span style={{ fontSize: "10px", color: "var(--text-4)", marginLeft: "8px" }}>{commit.date}</span>
+                          {(commits[app.slug] ?? []).length === 0
+                            ? <p className="px-4 py-3" style={{ fontSize: "11px", color: "var(--text-4)" }}>No commits found.</p>
+                            : (commits[app.slug] ?? []).map(commit => (
+                              <div key={commit.hash} className="flex items-center justify-between gap-2 px-4 py-2.5"
+                                style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+                                <div className="min-w-0">
+                                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--cyan)" }}>{commit.short}</span>
+                                  <span style={{ fontSize: "11px", color: "var(--text-2)", marginLeft: "8px" }}>{commit.message}</span>
+                                  <span style={{ fontSize: "10px", color: "var(--text-4)", marginLeft: "8px" }}>{commit.date}</span>
+                                </div>
+                                <button onClick={() => rollbackTo(app.slug, commit.hash)} disabled={rollingBack === commit.hash}
+                                  className="shrink-0 rounded-md px-2.5 py-1 text-[10px]"
+                                  style={{ background: "rgba(251,146,60,0.08)", border: "1px solid rgba(251,146,60,0.2)",
+                                    color: rollingBack === commit.hash ? "var(--text-4)" : "var(--orange)",
+                                    cursor: rollingBack === commit.hash ? "not-allowed" : "pointer" }}>
+                                  {rollingBack === commit.hash ? "Restoring…" : "Restore"}
+                                </button>
                               </div>
-                              <button onClick={() => rollbackTo(app.slug, commit.hash)} disabled={rollingBack === commit.hash}
-                                className="shrink-0 rounded-md px-2.5 py-1 text-[10px]"
-                                style={{ background: "rgba(251,146,60,0.08)", border: "1px solid rgba(251,146,60,0.2)", color: rollingBack === commit.hash ? "var(--text-4)" : "var(--orange)", cursor: rollingBack === commit.hash ? "not-allowed" : "pointer" }}>
-                                {rollingBack === commit.hash ? "Restoring…" : "Restore"}
-                              </button>
-                            </div>
-                          ))}
+                            ))
+                          }
                         </div>
                       )}
                     </div>
@@ -738,12 +762,11 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
   )
 }
 
-// ── Inner page ────────────────────────────────────────────────────────────────
+// ── Page shell ────────────────────────────────────────────────────────────────
 
 function FoundryPage() {
   useCommandRuntime()
   useCommandPaletteKeyboard()
-
   const { commandPaletteOpen } = useInteraction()
   const [activeTab, setActiveTab] = useState<Tab>("runtime")
 
@@ -756,15 +779,16 @@ function FoundryPage() {
   return (
     <AppShell>
       <div className="flex h-screen flex-col overflow-hidden">
-        {/* Tab bar — no ⌘K button, no context toggle */}
-        <div className="flex h-10 shrink-0 items-center px-4 gap-1" style={{ background: "var(--bg-raised)", borderBottom: "1px solid var(--border-subtle)" }}>
+        <div className="flex h-10 shrink-0 items-center px-4 gap-1"
+          style={{ background: "var(--bg-raised)", borderBottom: "1px solid var(--border-subtle)" }}>
           {tabs.map(({ id, label, symbol }) => {
             const active = activeTab === id
-            const accent = id === "forge" ? "var(--forge)" : id === "runtime" ? "var(--blue)" : "var(--text-3)"
             return (
               <button key={id} onClick={() => setActiveTab(id)}
                 className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-medium"
-                style={{ fontSize: "13px", background: active ? "var(--bg-overlay)" : "transparent", border: active ? "1px solid var(--border)" : "1px solid transparent", color: active ? "var(--text-1)" : "var(--text-3)" }}>
+                style={{ fontSize: "13px", background: active ? "var(--bg-overlay)" : "transparent",
+                  border: active ? "1px solid var(--border)" : "1px solid transparent",
+                  color: active ? "var(--text-1)" : "var(--text-3)" }}>
                 <span style={{ fontSize: "15px" }}>{symbol}</span>
                 <span className="hidden sm:inline">{label}</span>
               </button>
@@ -772,14 +796,12 @@ function FoundryPage() {
           })}
         </div>
 
-        {/* Content — full width, no sidebar */}
         <div className="flex flex-1 overflow-hidden">
           {activeTab === "runtime" && <div className="flex min-w-0 flex-1 flex-col overflow-hidden"><OperationalChat /></div>}
           {activeTab === "forge"   && <div className="flex-1 overflow-hidden"><ForgeTab onOpenApps={() => setActiveTab("apps")} /></div>}
           {activeTab === "apps"    && <div className="flex-1 overflow-hidden"><AppsTab onOpenForge={() => setActiveTab("forge")} /></div>}
         </div>
       </div>
-
       <CommandPalette open={commandPaletteOpen} />
       <StatusRail />
     </AppShell>
