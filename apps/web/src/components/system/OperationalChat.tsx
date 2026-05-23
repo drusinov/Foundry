@@ -435,41 +435,18 @@ export function OperationalChat({ keyStatus }: { keyStatus?: { openai: boolean; 
               </span>
             </div>
           )}
-          {/* Sticky copy last response */}
-          {(() => {
-            const lastResult = [...events].reverse().find(e => e.type === "result")
-            if (!lastResult) return null
-            return (
-              <div className="sticky bottom-2 flex justify-center mt-2">
-                <button
-                  onClick={() => copyEvent(lastResult.id, lastResult.content)}
-                  className="flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[11px] font-medium shadow-lg"
-                  style={{
-                    background: copiedId === lastResult.id ? "rgba(74,222,128,0.15)" : "var(--bg-overlay)",
-                    border: `1px solid ${copiedId === lastResult.id ? "rgba(74,222,128,0.3)" : "var(--border)"}`,
-                    color: copiedId === lastResult.id ? "var(--green)" : "var(--text-3)",
-                    backdropFilter: "blur(8px)",
-                    transition: "all 150ms",
-                  }}
-                >
-                  {copiedId === lastResult.id ? "✓ Copied" : "Copy last response"}
-                </button>
-              </div>
-            )
-          })()}
+
           {/* Scroll to bottom button — shown when user scrolls up during streaming */}
           {showScrollBtn && (
-            <div className="sticky bottom-2 flex justify-center">
+            <div className="sticky bottom-1 flex justify-center">
               <button
                 onClick={() => { scrollBottom(true); setShowScrollBtn(false) }}
-                className="flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[11px] shadow-lg"
                 style={{
-                  background:     "var(--bg-overlay)",
-                  border:         "1px solid var(--border)",
-                  color:          "var(--text-3)",
-                  backdropFilter: "blur(8px)",
+                  fontSize: "11px", color: "var(--text-4)", background: "transparent",
+                  border: "none", padding: "2px 8px", borderRadius: "4px",
+                  cursor: "pointer", opacity: 0.7,
                 }}>
-                ↓ Jump to bottom
+                ↓ scroll to bottom
               </button>
             </div>
           )}
