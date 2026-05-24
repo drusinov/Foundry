@@ -368,7 +368,7 @@ export function OperationalChat({ keyStatus }: { keyStatus?: { openai: boolean; 
               <div key={ev.id} className="fade-up flex items-center gap-3 py-1">
                 <div className="h-px flex-1" style={{ background: "var(--border-subtle)" }} />
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-4)" }}>
-                  {ev.content} · {ev.createdAt.slice(11, 19)}
+                  {ev.content} · {new Date(ev.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}
                 </span>
                 <div className="h-px flex-1" style={{ background: "var(--border-subtle)" }} />
               </div>
@@ -400,7 +400,7 @@ export function OperationalChat({ keyStatus }: { keyStatus?: { openai: boolean; 
                       )}
                       <TokenBadge usage={ev.usage} model={claudeModel} />
                       <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-4)", marginLeft: "auto" }}>
-                        {ev.createdAt.slice(11, 19)}
+                        {new Date(ev.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}
                       </span>
                     </div>
 

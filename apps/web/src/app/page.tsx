@@ -980,7 +980,7 @@ function FoundryPage() {
         </div>
 
         <div className="flex flex-1 overflow-hidden">
-          {activeTab === "runtime" && <div className="flex min-w-0 flex-1 flex-col overflow-hidden"><OperationalChat keyStatus={{ openai: !!user?.hasOpenaiKey, anthropic: !!user?.hasAnthropicKey }} /></div>}
+          {activeTab === "runtime" && <div className="flex min-w-0 flex-1 flex-col overflow-hidden" style={{ minHeight: 0 }}><OperationalChat keyStatus={{ openai: !!user?.hasOpenaiKey, anthropic: !!user?.hasAnthropicKey }} /></div>}
           {activeTab === "forge"   && <div className="flex-1 overflow-hidden"><ForgeTab onOpenApps={() => { setActiveTab("apps"); localStorage.setItem("foundry-tab", "apps") }} /></div>}
           {activeTab === "apps"    && <div className="flex-1 overflow-hidden"><AppsTab onOpenForge={() => { setActiveTab("forge"); localStorage.setItem("foundry-tab", "forge") }} /></div>}
         </div>
