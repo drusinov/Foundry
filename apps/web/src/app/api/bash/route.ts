@@ -65,7 +65,7 @@ function check(cmd: string): { ok: boolean; reason?: string } {
   const base  = parts[0]
 
   if (base === "git") {
-    const sub = parts[1]
+    const sub = parts[1] === "-C" ? parts[3] : parts[1]
     if (!sub || !ALLOWED_GIT.has(sub)) {
       return { ok: false, reason: `git ${sub ?? "?"} not in allowlist` }
     }
