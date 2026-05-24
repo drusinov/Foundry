@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -87,6 +88,11 @@ export default function LoginPage() {
             {loading ? "Signing in…" : "Sign in"}
           </button>
         </form>
+
+        <p className="mt-4 text-center" style={{ fontSize: "12px", color: "var(--text-4)" }}>
+          No account?{" "}
+          <Link href="/signup" style={{ color: "var(--blue)", textDecoration: "none" }}>Create one →</Link>
+        </p>
       </div>
     </div>
   )
