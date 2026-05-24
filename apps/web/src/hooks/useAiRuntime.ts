@@ -15,7 +15,8 @@ export function useAiRuntime() {
     keys:      { openaiKey: string; anthropicKey: string },
     prompt:    string,
     model:     string,
-    onChunk:   (partial: string) => void,
+    onChunk:    (partial: string) => void,
+  onToolCall?: (tc: { command: string; output: string; error: boolean }) => void,
   ): Promise<AiResult> {
     setLoading(true)
 
@@ -63,6 +64,9 @@ export function useAiRuntime() {
             if (ev.chunk !== undefined) {
               text += ev.chunk
               onChunk(text)
+            }
+            if (ev.tool_call) {
+              onToolCall?.(ev.tool_call)
             }
             if (ev.meta) {
               meta     = ev.meta

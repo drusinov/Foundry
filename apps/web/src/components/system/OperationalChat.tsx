@@ -199,10 +199,7 @@ export function OperationalChat({ keyStatus }: { keyStatus?: { openai: boolean; 
   const gitRuntime    = useGitRuntime()
   const fileRuntime   = useFileRuntime()
   const { loading, executePrompt } = useAiRuntime()
-  const bottomRef       = useRef<HTMLDivElement | null>(null)
-  const scrollAreaRef   = useRef<HTMLDivElement>(null)
-  const isNearBottomRef = useRef(true)
-  const [showScrollBtn, setShowScrollBtn] = useState(false)
+  const bottomRef     = useRef<HTMLDivElement | null>(null)
 
   const [openaiKey,    setOpenaiKey]    = useState("")
   const [anthropicKey, setAnthropicKey] = useState("")
@@ -216,23 +213,11 @@ export function OperationalChat({ keyStatus }: { keyStatus?: { openai: boolean; 
   const [copiedId, setCopiedId] = useState<string | null>(null)
   // Streaming in-progress content
   const [streamingContent, setStreamingContent] = useState("")
+  const [streamingToolCalls, setStreamingToolCalls] = useState<{ command: string; output: string; error: boolean }[]>([])
   // Model selector
   const [claudeModel, setClaudeModel] = useState(() =>
     typeof window !== "undefined" ? (localStorage.getItem("foundry-claude-model") ?? "claude-sonnet-4-6") : "claude-sonnet-4-6"
   )
-
-  function handleScroll() {
-    const el = scrollAreaRef.current
-    if (!el) return
-    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150
-    isNearBottomRef.current = nearBottom
-    setShowScrollBtn(!nearBottom)
-  }
-
-  function scrollBottom(force = false) {
-    if (!force && !isNearBottomRef.current) return
-    requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }))
-  }
 
   function copyEvent(id: string, content: string) {
     navigator.clipboard.writeText(content)
@@ -295,7 +280,7 @@ export function OperationalChat({ keyStatus }: { keyStatus?: { openai: boolean; 
     const built = generateAiPrompt({ continuity: context, userMessage: input })
     setBuiltPrompt(built)
     setInput("")
-    scrollBottom(true)
+    requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }))
 
     if (!openaiKey.trim() && !anthropicKey.trim()) {
       appendOperationalEvent({ id: createRuntimeId(), type: "error", content: "No API key set.", createdAt: new Date().toISOString() })
@@ -309,12 +294,13 @@ export function OperationalChat({ keyStatus }: { keyStatus?: { openai: boolean; 
       claudeModel,
       (partial) => {
         setStreamingContent(partial)
-        scrollBottom() // respects user scroll position
+        requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }))
       },
     )
 
     // Streaming done — clear live content and append final event
     setStreamingContent("")
+    setStreamingToolCalls([])
 
     setSessionTokens(prev => ({
       input:  prev.input  + result.usage.inputTokens,
@@ -329,8 +315,7 @@ export function OperationalChat({ keyStatus }: { keyStatus?: { openai: boolean; 
       pipeline:  result.pipeline,
       usage:     result.usage,
     })
-    setShowScrollBtn(false)
-    scrollBottom(true) // always scroll to final result
+    requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }))
   }
 
   async function onKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -346,9 +331,7 @@ export function OperationalChat({ keyStatus }: { keyStatus?: { openai: boolean; 
     <div className="flex h-full flex-col">
 
       {/* ── Event stream ── */}
-      <div ref={scrollAreaRef}
-        onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-4 py-4">
+      <div className="flex-1 overflow-y-auto px-4 py-4">
         <div className="mx-auto max-w-2xl space-y-2">
 
           {events.map((ev) => {
@@ -435,21 +418,28 @@ export function OperationalChat({ keyStatus }: { keyStatus?: { openai: boolean; 
               </span>
             </div>
           )}
-
-          {/* Scroll to bottom button — shown when user scrolls up during streaming */}
-          {showScrollBtn && (
-            <div className="sticky bottom-1 flex justify-center">
-              <button
-                onClick={() => { scrollBottom(true); setShowScrollBtn(false) }}
-                style={{
-                  fontSize: "11px", color: "var(--text-4)", background: "transparent",
-                  border: "none", padding: "2px 8px", borderRadius: "4px",
-                  cursor: "pointer", opacity: 0.7,
-                }}>
-                ↓ scroll to bottom
-              </button>
-            </div>
-          )}
+          {/* Sticky copy last response */}
+          {(() => {
+            const lastResult = [...events].reverse().find(e => e.type === "result")
+            if (!lastResult) return null
+            return (
+              <div className="sticky bottom-2 flex justify-center mt-2">
+                <button
+                  onClick={() => copyEvent(lastResult.id, lastResult.content)}
+                  className="flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[11px] font-medium shadow-lg"
+                  style={{
+                    background: copiedId === lastResult.id ? "rgba(74,222,128,0.15)" : "var(--bg-overlay)",
+                    border: `1px solid ${copiedId === lastResult.id ? "rgba(74,222,128,0.3)" : "var(--border)"}`,
+                    color: copiedId === lastResult.id ? "var(--green)" : "var(--text-3)",
+                    backdropFilter: "blur(8px)",
+                    transition: "all 150ms",
+                  }}
+                >
+                  {copiedId === lastResult.id ? "✓ Copied" : "Copy last response"}
+                </button>
+              </div>
+            )
+          })()}
           <div ref={bottomRef} />
         </div>
       </div>
