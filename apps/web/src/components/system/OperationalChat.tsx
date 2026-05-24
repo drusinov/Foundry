@@ -177,12 +177,21 @@ function eventColors(type: OperationalEventType) {
 
 // ── Token badge ───────────────────────────────────────────────────────────────
 
-function TokenBadge({ usage }: { usage?: AiUsage }) {
+const MODEL_RATES: Record<string, [number, number]> = {
+  "claude-haiku-4-5-20251001": [0.80,  4],
+  "claude-sonnet-4-6":         [3,    15],
+  "claude-opus-4-6":           [15,   75],
+}
+
+function TokenBadge({ usage, model }: { usage?: AiUsage; model?: string }) {
   if (!usage || (usage.inputTokens === 0 && usage.outputTokens === 0)) return null
-  const fmt = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
+  const fmt  = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
+  const [inR, outR] = MODEL_RATES[model ?? "claude-sonnet-4-6"] ?? [3, 15]
+  const cost = (usage.inputTokens * inR + usage.outputTokens * outR) / 1_000_000
+  const costStr = cost < 0.0005 ? "<$0.001" : `$${cost.toFixed(3)}`
   return (
     <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-4)" }}>
-      ↑{fmt(usage.inputTokens)} ↓{fmt(usage.outputTokens)}
+      ↑{fmt(usage.inputTokens)} ↓{fmt(usage.outputTokens)} · {costStr}
     </span>
   )
 }
@@ -195,11 +204,14 @@ type ExtendedEvent = {
 }
 
 export function OperationalChat({ keyStatus }: { keyStatus?: { openai: boolean; anthropic: boolean } }) {
-  const { latestCheckpoint, operationalEvents, appendOperationalEvent } = useInteraction()
+  const { latestCheckpoint, operationalEvents, appendOperationalEvent, clearOperationalEvents } = useInteraction()
   const gitRuntime    = useGitRuntime()
   const fileRuntime   = useFileRuntime()
   const { loading, executePrompt } = useAiRuntime()
-  const bottomRef     = useRef<HTMLDivElement | null>(null)
+  const bottomRef       = useRef<HTMLDivElement | null>(null)
+  const scrollAreaRef   = useRef<HTMLDivElement>(null)
+  const isNearBottomRef = useRef(true)
+  const [showScrollBtn, setShowScrollBtn] = useState(false)
 
   const [openaiKey,    setOpenaiKey]    = useState("")
   const [anthropicKey, setAnthropicKey] = useState("")
@@ -213,11 +225,23 @@ export function OperationalChat({ keyStatus }: { keyStatus?: { openai: boolean; 
   const [copiedId, setCopiedId] = useState<string | null>(null)
   // Streaming in-progress content
   const [streamingContent, setStreamingContent] = useState("")
-  const [streamingToolCalls, setStreamingToolCalls] = useState<{ command: string; output: string; error: boolean }[]>([])
   // Model selector
   const [claudeModel, setClaudeModel] = useState(() =>
     typeof window !== "undefined" ? (localStorage.getItem("foundry-claude-model") ?? "claude-sonnet-4-6") : "claude-sonnet-4-6"
   )
+
+  function handleScroll() {
+    const el = scrollAreaRef.current
+    if (!el) return
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150
+    isNearBottomRef.current = nearBottom
+    setShowScrollBtn(!nearBottom)
+  }
+
+  function scrollBottom(force = false) {
+    if (!force && !isNearBottomRef.current) return
+    requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }))
+  }
 
   function copyEvent(id: string, content: string) {
     navigator.clipboard.writeText(content)
@@ -280,7 +304,7 @@ export function OperationalChat({ keyStatus }: { keyStatus?: { openai: boolean; 
     const built = generateAiPrompt({ continuity: context, userMessage: input })
     setBuiltPrompt(built)
     setInput("")
-    requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }))
+    scrollBottom(true)
 
     if (!openaiKey.trim() && !anthropicKey.trim()) {
       appendOperationalEvent({ id: createRuntimeId(), type: "error", content: "No API key set.", createdAt: new Date().toISOString() })
@@ -294,13 +318,12 @@ export function OperationalChat({ keyStatus }: { keyStatus?: { openai: boolean; 
       claudeModel,
       (partial) => {
         setStreamingContent(partial)
-        requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }))
+        scrollBottom() // respects user scroll position
       },
     )
 
     // Streaming done — clear live content and append final event
     setStreamingContent("")
-    setStreamingToolCalls([])
 
     setSessionTokens(prev => ({
       input:  prev.input  + result.usage.inputTokens,
@@ -315,7 +338,8 @@ export function OperationalChat({ keyStatus }: { keyStatus?: { openai: boolean; 
       pipeline:  result.pipeline,
       usage:     result.usage,
     })
-    requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }))
+    setShowScrollBtn(false)
+    scrollBottom(true) // always scroll to final result
   }
 
   async function onKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -331,7 +355,9 @@ export function OperationalChat({ keyStatus }: { keyStatus?: { openai: boolean; 
     <div className="flex h-full flex-col">
 
       {/* ── Event stream ── */}
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      <div ref={scrollAreaRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto px-4 py-4">
         <div className="mx-auto max-w-2xl space-y-2">
 
           {events.map((ev) => {
@@ -370,7 +396,7 @@ export function OperationalChat({ keyStatus }: { keyStatus?: { openai: boolean; 
                           {ev.pipeline === "openai→claude" ? "GPT → Claude" : ev.pipeline === "claude" ? "Claude" : "GPT"}
                         </span>
                       )}
-                      <TokenBadge usage={ev.usage} />
+                      <TokenBadge usage={ev.usage} model={claudeModel} />
                       <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-4)", marginLeft: "auto" }}>
                         {ev.createdAt.slice(11, 19)}
                       </span>
@@ -418,28 +444,45 @@ export function OperationalChat({ keyStatus }: { keyStatus?: { openai: boolean; 
               </span>
             </div>
           )}
-          {/* Sticky copy last response */}
-          {(() => {
-            const lastResult = [...events].reverse().find(e => e.type === "result")
-            if (!lastResult) return null
-            return (
-              <div className="sticky bottom-2 flex justify-center mt-2">
-                <button
-                  onClick={() => copyEvent(lastResult.id, lastResult.content)}
-                  className="flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[11px] font-medium shadow-lg"
-                  style={{
-                    background: copiedId === lastResult.id ? "rgba(74,222,128,0.15)" : "var(--bg-overlay)",
-                    border: `1px solid ${copiedId === lastResult.id ? "rgba(74,222,128,0.3)" : "var(--border)"}`,
-                    color: copiedId === lastResult.id ? "var(--green)" : "var(--text-3)",
-                    backdropFilter: "blur(8px)",
-                    transition: "all 150ms",
-                  }}
-                >
-                  {copiedId === lastResult.id ? "✓ Copied" : "Copy last response"}
-                </button>
-              </div>
-            )
-          })()}
+          {/* Bottom action bar — clear + copy last */}
+          {events.length > 0 && (
+            <div className="sticky bottom-1 flex items-center justify-between px-1 py-1">
+              <button onClick={clearOperationalEvents}
+                style={{ fontSize: "10px", fontFamily: "var(--font-mono)", color: "var(--text-4)", background: "transparent", border: "none", cursor: "pointer", opacity: 0.55, padding: "2px 6px" }}
+                onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.opacity = "1"}
+                onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.opacity = "0.55"}>
+                clear
+              </button>
+              {(() => {
+                const lastResult = [...events].reverse().find(e => e.type === "result")
+                if (!lastResult) return null
+                return (
+                  <button onClick={() => copyEvent(lastResult.id, lastResult.content)}
+                    style={{ fontSize: "10px", color: copiedId === lastResult.id ? "var(--green)" : "var(--text-4)", background: "transparent", border: "none", cursor: "pointer", opacity: 0.75, padding: "2px 6px" }}
+                    onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.opacity = "1"}
+                    onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.opacity = "0.75"}>
+                    {copiedId === lastResult.id ? "✓ copied" : "copy"}
+                  </button>
+                )
+              })()}
+            </div>
+          )}
+          {/* Scroll to bottom button — shown when user scrolls up during streaming */}
+          {showScrollBtn && (
+            <div className="sticky bottom-2 flex justify-center">
+              <button
+                onClick={() => { scrollBottom(true); setShowScrollBtn(false) }}
+                className="flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[11px] shadow-lg"
+                style={{
+                  background:     "var(--bg-overlay)",
+                  border:         "1px solid var(--border)",
+                  color:          "var(--text-3)",
+                  backdropFilter: "blur(8px)",
+                }}>
+                ↓ Jump to bottom
+              </button>
+            </div>
+          )}
           <div ref={bottomRef} />
         </div>
       </div>

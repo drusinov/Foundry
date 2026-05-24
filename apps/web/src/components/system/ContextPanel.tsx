@@ -39,7 +39,7 @@ export function ContextPanel() {
         </Block>
 
         <Block label="Active Risks">
-          {sessionRuntime.activeRisks.map((r, i) => (
+          {(Array.isArray(sessionRuntime.activeRisks) ? sessionRuntime.activeRisks : []).map((r, i) => (
             <div key={i} className="flex items-start gap-2 rounded-lg px-2.5 py-2 mb-1" style={{ background: "rgba(251,146,60,0.06)", border: "1px solid rgba(251,146,60,0.13)" }}>
               <div className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: "var(--orange)" }} />
               <span style={{ fontSize: "12px", color: "rgba(251,146,60,0.85)", lineHeight: "1.45" }}>{r}</span>

@@ -501,7 +501,7 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
     try {
       const genRes  = await fetch("/api/forge/edit", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug: editSlug, description: editIdea, anthropicKey }),
+        body: JSON.stringify({ slug: editSlug, description: editIdea }),
       })
       const genData = await genRes.json()
       if (!genRes.ok || genData.error) {
@@ -510,7 +510,7 @@ function AppsTab({ onOpenForge }: { onOpenForge: () => void }) {
 
       setReforgeStep("Applying changes…"); setReforgeProgress(88)
 
-      const updateRes  = await fetch("/api/forge/update", {
+      const updateRes  = await fetch("/api/forge/apply-edit", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ slug: editSlug, files: genData.files }),
       })
@@ -772,7 +772,7 @@ function FoundryPage() {
   useCommandPaletteKeyboard()
   const router = useRouter()
   const { commandPaletteOpen } = useInteraction()
-  const [activeTab, setActiveTab]     = useState<Tab>("forge")
+  const [activeTab, setActiveTab]     = useState<Tab>(() => (typeof window !== "undefined" ? (localStorage.getItem("foundry-tab") as Tab) ?? "forge" : "forge"))
   const [user, setUser]               = useState<UserInfo | null>(null)
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showAddUser, setShowAddUser] = useState(false)
@@ -790,7 +790,13 @@ function FoundryPage() {
       .then(d => {
         if (!d) { router.push("/login"); return }
         setUser(d)
-        if (d.role === "admin") setActiveTab("runtime")
+        const saved = typeof window !== "undefined" ? localStorage.getItem("foundry-tab") as Tab : null
+        const valid = d.role === "admin" ? ["runtime","forge","apps"] : ["forge","apps"]
+        if (saved && valid.includes(saved)) {
+          setActiveTab(saved)
+        } else {
+          setActiveTab(d.role === "admin" ? "runtime" : "forge")
+        }
       })
   }, [router])
 
@@ -844,14 +850,14 @@ function FoundryPage() {
 
   return (
     <AppShell>
-      <div className="flex h-screen flex-col overflow-hidden">
+      <div className="flex flex-col overflow-hidden" style={{ height: "100dvh" }}>
         {/* Tab bar */}
         <div className="flex h-10 shrink-0 items-center px-4 gap-1"
           style={{ background: "var(--bg-raised)", borderBottom: "1px solid var(--border-subtle)" }}>
           {tabs.map(({ id, label, symbol }) => {
             const active = activeTab === id
             return (
-              <button key={id} onClick={() => setActiveTab(id)}
+              <button key={id} onClick={() => { setActiveTab(id); localStorage.setItem("foundry-tab", id) }}
                 className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-medium"
                 style={{ fontSize: "13px", background: active ? "var(--bg-overlay)" : "transparent",
                   border: active ? "1px solid var(--border)" : "1px solid transparent",
@@ -975,8 +981,8 @@ function FoundryPage() {
 
         <div className="flex flex-1 overflow-hidden">
           {activeTab === "runtime" && <div className="flex min-w-0 flex-1 flex-col overflow-hidden"><OperationalChat keyStatus={{ openai: !!user?.hasOpenaiKey, anthropic: !!user?.hasAnthropicKey }} /></div>}
-          {activeTab === "forge"   && <div className="flex-1 overflow-hidden"><ForgeTab onOpenApps={() => setActiveTab("apps")} /></div>}
-          {activeTab === "apps"    && <div className="flex-1 overflow-hidden"><AppsTab onOpenForge={() => setActiveTab("forge")} /></div>}
+          {activeTab === "forge"   && <div className="flex-1 overflow-hidden"><ForgeTab onOpenApps={() => { setActiveTab("apps"); localStorage.setItem("foundry-tab", "apps") }} /></div>}
+          {activeTab === "apps"    && <div className="flex-1 overflow-hidden"><AppsTab onOpenForge={() => { setActiveTab("forge"); localStorage.setItem("foundry-tab", "forge") }} /></div>}
         </div>
       </div>
       <CommandPalette open={commandPaletteOpen} />
