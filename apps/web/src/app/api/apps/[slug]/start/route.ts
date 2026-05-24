@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { getSession } from "@/lib/auth"
+import { healNginx } from "@/lib/nginx-heal"
 import fs from "node:fs"
 import path from "node:path"
 import { execSync } from "node:child_process"
@@ -7,27 +7,13 @@ import { execSync } from "node:child_process"
 export const dynamic = "force-dynamic"
 
 const APPS_DIR      = "/opt/forged-apps"
-const REGISTRY_PATH = /* turbopackIgnore: true */ "/opt/foundry/forged-apps.json"
+const REGISTRY_PATH = "/opt/foundry/forged-apps.json"
 
 type RouteContext = { params: Promise<{ slug: string }> }
 
 export async function POST(_: Request, context: RouteContext) {
   try {
     const { slug } = await context.params
-
-    // Auth + ownership check
-    const session = await getSession()
-    if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
-
-    // Verify this user owns the app (or is admin)
-    try {
-      const registry = JSON.parse(fs.readFileSync('/opt/foundry/forged-apps.json', 'utf8'))
-      const app = registry.find((a: { slug: string; userId?: string }) => a.slug === slug)
-      if (app && app.userId && app.userId !== session.userId && session.role !== 'admin') {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-      }
-    } catch { /* registry unreadable — allow, will fail later */ }
-
     const appDir   = path.join(APPS_DIR, slug)
     const pm2Name  = `forge-${slug}`
 
@@ -59,6 +45,9 @@ export async function POST(_: Request, context: RouteContext) {
       a.slug === slug ? { ...a, status: "running" } : a
     )
     fs.writeFileSync(REGISTRY_PATH, JSON.stringify(updated, null, 2))
+
+    // Auto-heal nginx in case port mapping is wrong
+    healNginx()
 
     return NextResponse.json({ success: true, slug, status: "running" })
   } catch (error) {

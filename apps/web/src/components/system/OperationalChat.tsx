@@ -261,6 +261,8 @@ export function OperationalChat({ keyStatus }: { keyStatus?: { openai: boolean; 
     async function checkHealth() {
       try {
         const res = await fetch("/api/apps/health")
+        // Auto-heal nginx port mismatches silently
+        fetch("/api/apps/heal", { method: "POST" }).catch(() => {})
         const { crashed } = await res.json()
         if (Array.isArray(crashed)) {
           crashed.forEach((app: { name: string; pm2Name: string; restarts: number }) => {
@@ -378,9 +380,7 @@ export function OperationalChat({ keyStatus }: { keyStatus?: { openai: boolean; 
                 <button
                   onClick={() => copyEvent(ev.id, ev.content)}
                   className="absolute right-2.5 top-2.5 opacity-0 group-hover:opacity-100 rounded-md px-2 py-1 transition-opacity"
-                  style={{ fontSize: "10px", color: copiedId === ev.id ? "var(--green)" : "var(--text-4)", background: "transparent", border: "none", cursor: "pointer", opacity: copiedId === ev.id ? 1 : 0.5, transition: "all 150ms" }}
-                    onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.opacity = "1"}
-                    onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.opacity = copiedId === ev.id ? "1" : "0.5"}
+                  style={{ fontSize: "10px", color: copiedId === ev.id ? "var(--green)" : "var(--text-4)", background: "var(--bg-overlay)", border: `1px solid ${copiedId === ev.id ? "rgba(74,222,128,0.3)" : "var(--border-subtle)"}`, transition: "color 150ms, border-color 150ms" }}
                 >
                   {copiedId === ev.id ? "Copied ✓" : "Copy"}
                 </button>
@@ -460,9 +460,9 @@ export function OperationalChat({ keyStatus }: { keyStatus?: { openai: boolean; 
                 if (!lastResult) return null
                 return (
                   <button onClick={() => copyEvent(lastResult.id, lastResult.content)}
-                    style={{ fontSize: "10px", color: copiedId === lastResult.id ? "var(--green)" : "var(--text-4)", background: "transparent", border: "none", cursor: "pointer", opacity: copiedId === lastResult.id ? 1 : 0.45, padding: "2px 4px", transition: "all 150ms" }}
+                    style={{ fontSize: "10px", color: copiedId === lastResult.id ? "var(--green)" : "var(--text-4)", background: "transparent", border: "none", cursor: "pointer", opacity: 0.75, padding: "2px 6px" }}
                     onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.opacity = "1"}
-                    onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.opacity = copiedId === lastResult.id ? "1" : "0.45"}>
+                    onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.opacity = "0.75"}>
                     {copiedId === lastResult.id ? "✓ copied" : "copy"}
                   </button>
                 )
