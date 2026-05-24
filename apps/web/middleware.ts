@@ -11,6 +11,8 @@ const SESSION_COOKIE = "foundry-session"
 const PUBLIC = [
   "/login",
   "/setup",
+  "/signup",
+  "/api/auth/signup",
   "/api/auth/login",
   "/api/auth/logout",
   "/api/auth/setup",
